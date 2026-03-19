@@ -139,3 +139,21 @@ Remove an old deployment if you applied an earlier revision with a dotted name:
 ```bash
 sudo k3s kubectl delete deployment vllm-qwen2.5-7b --ignore-not-found
 ```
+
+### Expose the vLLM Deployment with a NodePort Service.
+
+Run on your k3s server node:
+
+# 1) Create NodePort service for vLLM deployment
+```bash
+sudo k3s kubectl expose deployment vllm-qwen25-7b \
+  --name vllm-qwen25-7b-svc \
+  --type NodePort \
+  --port 8000 \
+  --target-port 8000
+```
+
+# 2) Get the assigned node port
+```bash
+sudo k3s kubectl get svc vllm-qwen25-7b-svc -o wide
+```
