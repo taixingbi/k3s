@@ -157,3 +157,19 @@ sudo k3s kubectl expose deployment vllm-qwen25-7b \
 ```bash
 sudo k3s kubectl get svc vllm-qwen25-7b-svc -o wide
 ```
+
+### vLLM (BAAI/bge-m3 on gpu-node-1, port 8001)
+
+Manifest: `vllm-bge-m3.yaml` (Deployment name: `vllm-bge-m3`).
+
+```bash
+sudo k3s kubectl apply -f vllm-bge-m3.yaml
+sudo k3s kubectl get pods -l app=vllm-bge-m3 -o wide -w
+sudo k3s kubectl port-forward deployment/vllm-bge-m3 8001:8001
+```
+
+Model serve arguments in this manifest:
+
+```bash
+vllm serve BAAI/bge-m3 --host 0.0.0.0 --port 8001 --gpu-memory-utilization 0.1
+```

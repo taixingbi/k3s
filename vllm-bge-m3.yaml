@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-bge-m3
+  labels:
+    app: vllm-bge-m3
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-bge-m3
+  template:
+    metadata:
+      labels:
+        app: vllm-bge-m3
+    spec:
+      automountServiceAccountToken: false
+      nodeName: gpu-node-1
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:latest
+          args:
+            - --model
+            - BAAI/bge-m3
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8001"
+            - --gpu-memory-utilization
+            - "0.1"
+          ports:
+            - name: http
+              containerPort: 8001
+          resources:
+            limits:
+              nvidia.com/gpu: "1"
+            requests:
+              nvidia.com/gpu: "1"
