@@ -32,7 +32,7 @@ sudo -E ./install-k3s-agent.sh
 If `gpu-node-2` is not resolvable from gpu-node-1, use the server’s IP:
 
 ```bash
-export K3S_URL=https://192.168.86.173:6443
+export K3S_URL=https://192.168.86.176:6443
 export K3S_TOKEN=K10068f3ec7343811686d772c8567796565dbc7fbb198761056b8a36feea0bac1d5::server:b23373d01da11c5b1f38b94552c58cd4
 sudo -E ./install-k3s-agent.sh
 ```
