@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-qwen25-7b
+  labels:
+    app: vllm-qwen25-7b
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-qwen25-7b
+  template:
+    metadata:
+      labels:
+        app: vllm-qwen25-7b
+    spec:
+      automountServiceAccountToken: false
+      runtimeClassName: nvidia
+      nodeName: gpu-node-1
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:latest
+          args:
+            - --model
+            - Qwen/Qwen2.5-7B-Instruct
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8000"
+            - --gpu-memory-utilization
+            - "0.7"
+          ports:
+            - name: http
+              containerPort: 8000
+          resources:
+            limits:
+              nvidia.com/gpu: "1"
+            requests:
+              nvidia.com/gpu: "1"

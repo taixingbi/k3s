@@ -11,11 +11,13 @@
 # Environment overrides:
 #   GPU_OPERATOR_VERSION         Helm chart/operator version (default: v25.3.3)
 #   GPU_OPERATOR_NAMESPACE       Namespace for operator (default: gpu-operator)
-#   GPU_NODE_NAME               Node to check allocatable on (default: gpu-node-1)
+#   GPU_NODE_NAMES              Comma-separated nodes to check allocatable on
+#                               (default: gpu-node-1,gpu-node-2)
 #
 # Notes:
 # - Uses your pre-installed NVIDIA driver (driver.enabled=false).
 # - Allows Operator to install/configure NVIDIA Container Toolkit (toolkit.enabled=true).
+# - Configures toolkit for k3s containerd paths (socket + config).
 
 set -euo pipefail
 
@@ -34,12 +36,16 @@ fi
 
 GPU_OPERATOR_VERSION="${GPU_OPERATOR_VERSION:-v25.3.3}"
 GPU_OPERATOR_NAMESPACE="${GPU_OPERATOR_NAMESPACE:-gpu-operator}"
-GPU_NODE_NAME="${GPU_NODE_NAME:-gpu-node-1}"
+GPU_NODE_NAMES="${GPU_NODE_NAMES:-gpu-node-1,gpu-node-2}"
+K3S_CONTAINERD_SOCKET="${K3S_CONTAINERD_SOCKET:-/run/k3s/containerd/containerd.sock}"
+K3S_CONTAINERD_CONFIG="${K3S_CONTAINERD_CONFIG:-/var/lib/rancher/k3s/agent/etc/containerd/config.toml}"
 
 echo "Installing NVIDIA GPU Operator:"
 echo "  chart/operator version: ${GPU_OPERATOR_VERSION}"
 echo "  namespace: ${GPU_OPERATOR_NAMESPACE}"
-echo "  node allocatable check: ${GPU_NODE_NAME}"
+echo "  node allocatable checks: ${GPU_NODE_NAMES}"
+echo "  containerd socket: ${K3S_CONTAINERD_SOCKET}"
+echo "  containerd config: ${K3S_CONTAINERD_CONFIG}"
 echo ""
 
 if ! command -v helm >/dev/null 2>&1; then
@@ -84,34 +90,47 @@ if helm status "${RELEASE_NAME}" "${HELM_BASE_ARGS[@]}" >/dev/null 2>&1; then
     "${HELM_WAIT_ARGS[@]}" \
     --version "${GPU_OPERATOR_VERSION}" \
     --set driver.enabled=false \
-    --set toolkit.enabled=true
+    --set toolkit.enabled=true \
+    --set toolkit.env[0].name=CONTAINERD_SOCKET \
+    --set toolkit.env[0].value="${K3S_CONTAINERD_SOCKET}" \
+    --set toolkit.env[1].name=CONTAINERD_CONFIG \
+    --set toolkit.env[1].value="${K3S_CONTAINERD_CONFIG}"
 else
   helm install "${RELEASE_NAME}" nvidia/gpu-operator \
     "${HELM_BASE_ARGS[@]}" \
     "${HELM_WAIT_ARGS[@]}" \
     --version "${GPU_OPERATOR_VERSION}" \
     --set driver.enabled=false \
-    --set toolkit.enabled=true
+    --set toolkit.enabled=true \
+    --set toolkit.env[0].name=CONTAINERD_SOCKET \
+    --set toolkit.env[0].value="${K3S_CONTAINERD_SOCKET}" \
+    --set toolkit.env[1].name=CONTAINERD_CONFIG \
+    --set toolkit.env[1].value="${K3S_CONTAINERD_CONFIG}"
 fi
 
 echo ""
-echo "Waiting for GPU resources to appear on node: ${GPU_NODE_NAME}"
-
-alloc_value=""
-for _ in $(seq 1 72); do
-  # Use jsonpath with bracket syntax to handle the dot in "nvidia.com/gpu"
-  alloc_value="$(
-    k3s kubectl get node "${GPU_NODE_NAME}" \
-      -o jsonpath='{.status.allocatable["nvidia.com/gpu"]}' 2>/dev/null || true
-  )"
-  if [[ "${alloc_value:-}" != "" && "${alloc_value:-}" != "0" ]]; then
-    break
+IFS=',' read -r -a gpu_nodes <<< "${GPU_NODE_NAMES}"
+for gpu_node in "${gpu_nodes[@]}"; do
+  gpu_node="$(echo "${gpu_node}" | xargs)"
+  if [[ -z "${gpu_node}" ]]; then
+    continue
   fi
-  sleep 5
-done
 
-echo ""
-echo "Allocatable nvidia.com/gpu on ${GPU_NODE_NAME}: ${alloc_value:-<not-set>}"
+  echo "Waiting for GPU resources to appear on node: ${gpu_node}"
+  alloc_value=""
+  for _ in $(seq 1 72); do
+    # Use go-template; jsonpath indexing with dots is inconsistent across kubectl builds.
+    alloc_value="$(
+      k3s kubectl get node "${gpu_node}" \
+        -o go-template='{{index .status.allocatable "nvidia.com/gpu"}}' 2>/dev/null || true
+    )"
+    if [[ "${alloc_value:-}" != "" && "${alloc_value:-}" != "<no value>" && "${alloc_value:-}" != "0" ]]; then
+      break
+    fi
+    sleep 5
+  done
+  echo "Allocatable nvidia.com/gpu on ${gpu_node}: ${alloc_value:-<not-set>}"
+done
 
 echo ""
 echo "Operator status (best-effort):"

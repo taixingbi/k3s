@@ -58,7 +58,7 @@ GPU workloads require the Kubernetes NVIDIA stack (device plugin and container r
 
 ### Prerequisites
 
-- `nvidia-smi` works on `gpu-node-1`
+- `nvidia-smi` works on each GPU node (`gpu-node-1` and `gpu-node-2`)
 - Your cluster is up and both nodes are `Ready` (see `Verification` above)
 
 ### Install NVIDIA GPU Operator
@@ -74,6 +74,9 @@ This installs the NVIDIA GPU Operator via Helm and configures it to use your pre
 
 - `driver.enabled=false`
 - `toolkit.enabled=true`
+- k3s containerd paths:
+  - socket: `/run/k3s/containerd/containerd.sock`
+  - config: `/var/lib/rancher/k3s/agent/etc/containerd/config.toml`
 
 ### Verify device plugin + GPU allocatable
 
@@ -81,7 +84,8 @@ On **gpu-node-2**, run:
 
 ```bash
 sudo k3s kubectl get pods -n gpu-operator -o wide | grep -i nvidia || true
-sudo k3s kubectl get node gpu-node-1 -o jsonpath='{.status.allocatable["nvidia.com/gpu"]}'
+sudo k3s kubectl get node gpu-node-1 -o go-template='{{index .status.allocatable "nvidia.com/gpu"}}{{"\n"}}'
+sudo k3s kubectl get node gpu-node-2 -o go-template='{{index .status.allocatable "nvidia.com/gpu"}}{{"\n"}}'
 ```
 
 You want the allocatable value to be a number (for the 3090 it should typically be `1` unless you’re using MIG/time-slicing).
@@ -95,4 +99,43 @@ sudo k3s kubectl apply -f gpu-vectoradd-sample.yaml
 sudo k3s kubectl get pods -A -o wide | grep -i vectoradd || true
 ```
 
-If the GPU Operator is working, the pod will schedule on `gpu-node-1` and move to `Running` briefly (then it may exit depending on the sample behavior).
+If the GPU Operator is working, the pod will schedule on one of the GPU nodes and move to `Running` briefly (then it may exit depending on the sample behavior).
+
+### vLLM (Qwen2.5-7B-Instruct on gpu-node-1)
+
+Manifest: `vllm-qwen2.5-7b-instruct.yaml` (Deployment name is **`vllm-qwen25-7b`** — no dots, valid DNS labels).
+
+```bash
+sudo k3s kubectl apply -f vllm-qwen2.5-7b-instruct.yaml
+# Wait until Running (image pull + model download can take many minutes)
+sudo k3s kubectl get pods -l app=vllm-qwen25-7b -o wide -w
+# Only then:
+sudo k3s kubectl port-forward deployment/vllm-qwen25-7b 8000:8000
+```
+
+If `port-forward` says the pod is **Pending**, check events:
+
+```bash
+sudo k3s kubectl describe pod -l app=vllm-qwen25-7b
+```
+
+Common causes: GPU not allocatable on `gpu-node-1`, image still pulling, or admission errors.
+
+If pods show **`UnexpectedAdmissionError`**, the manifest is adjusted to avoid common Pod Security violations:
+
+1. Do not set `runtimeClassName: nvidia` (GPU Operator already injects runtime handling)
+2. Avoid `hostIPC: true` (Pod Security often blocks it)
+
+Re-apply after cleanup:
+
+```bash
+sudo k3s kubectl delete deployment vllm-qwen25-7b --ignore-not-found
+sudo k3s kubectl delete pods -l app=vllm-qwen25-7b --force --grace-period=0 2>/dev/null || true
+sudo k3s kubectl apply -f vllm-qwen2.5-7b-instruct.yaml
+```
+
+Remove an old deployment if you applied an earlier revision with a dotted name:
+
+```bash
+sudo k3s kubectl delete deployment vllm-qwen2.5-7b --ignore-not-found
+```

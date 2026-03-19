@@ -1,2 +1,24 @@
-curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.34.5+k3s1 \
-  K3S_URL=https://192.168.86.173:6443 K3S_TOKEN=K10068f3ec7343811686d772c8567796565dbc7fbb198761056b8a36feea0bac1d5::server:b23373d01da11c5b1f38b94552c58cd4 sh -s - agent
+sudo k3s kubectl scale deployment vllm-qwen25-7b --replicas=0 --ignore-not-found
+sudo k3s kubectl scale deployment vllm-qwen2.5-7b --replicas=0 --ignore-not-found
+
+sudo k3s kubectl delete deployment vllm-qwen25-7b --ignore-not-found
+sudo k3s kubectl delete deployment vllm-qwen2.5-7b --ignore-not-found
+
+sudo k3s kubectl delete rs -l app=vllm-qwen25-7b --ignore-not-found
+sudo k3s kubectl delete rs -l app=vllm-qwen2.5-7b --ignore-not-found
+
+sudo k3s kubectl delete pods -l app=vllm-qwen25-7b --force --grace-period=0 2>/dev/null || true
+sudo k3s kubectl delete pods -l app=vllm-qwen2.5-7b --force --grace-period=0 2>/dev/null || true
+
+sudo k3s kubectl delete pod cuda-vectoradd --ignore-not-found
+
+sudo k3s kubectl describe node gpu-node-1 | sed -n '/Allocated resources:/,/Events:/p'
+
+
+
+
+
+
+sudo k3s kubectl delete deployment vllm-qwen25-7b --ignore-not-found
+sudo k3s kubectl apply -f vllm-qwen2.5-7b-instruct.yaml
+sudo k3s kubectl get pods -o wide -w
