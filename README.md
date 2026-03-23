@@ -95,6 +95,19 @@ This installs the NVIDIA GPU Operator via Helm and configures it to use your pre
   - socket: `/run/k3s/containerd/containerd.sock`
   - config: `/var/lib/rancher/k3s/agent/etc/containerd/config.toml`
 
+**Manual Helm upgrade** (if needed, use release name `nvidia-gpu-operator` to match the install script):
+
+```bash
+sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade --install nvidia-gpu-operator nvidia/gpu-operator \
+  -n gpu-operator \
+  --set driver.enabled=false \
+  --set toolkit.enabled=true \
+  --set "toolkit.env[0].name=CONTAINERD_CONFIG" \
+  --set "toolkit.env[0].value=/var/lib/rancher/k3s/agent/etc/containerd/config.toml" \
+  --set "toolkit.env[1].name=CONTAINERD_SOCKET" \
+  --set "toolkit.env[1].value=/run/k3s/containerd/containerd.sock"
+```
+
 ### Verify device plugin + GPU allocatable
 
 On **server-node-1**, run:
@@ -137,6 +150,18 @@ sudo k3s kubectl describe pod -l app=vllm-qwen25-7b
 ```
 
 Common causes: GPU not allocatable on GPU nodes, image still pulling, or admission errors.
+
+**If pod is in `Error` or `CrashLoopBackOff`**, check logs and events:
+
+```bash
+sudo k3s kubectl logs -l app=vllm-qwen25-7b --tail=100
+sudo k3s kubectl describe pod -l app=vllm-qwen25-7b | tail -60
+```
+
+Typical fixes:
+- **OOM**: Reduce `--gpu-memory-utilization` (e.g. `0.5`) or use a smaller model
+- **Model download fails / "Failed to resolve huggingface.co"**: Pod DNS issue. The manifest uses `dnsPolicy: Default` to use the node's DNS. If it still fails, pre-download the model on the GPU node and use `--model /path/to/model` with a volume mount.
+- **CUDA error**: Verify `nvidia-smi` works on the GPU node; ensure NVIDIA driver version matches container
 
 If pods show **`UnexpectedAdmissionError`**, the manifest is adjusted to avoid common Pod Security violations:
 

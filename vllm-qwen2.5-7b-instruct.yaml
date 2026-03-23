@@ -15,8 +15,10 @@ spec:
         app: vllm-qwen25-7b
     spec:
       automountServiceAccountToken: false
-      # GPU Operator injects runtime handling; avoid runtimeClassName to prevent Pod Security issues
-      # Schedules on any GPU node via resources.limits; remove nodeName for flexibility
+      # Required for GPU access: nvidia runtime loads libcuda into the container
+      runtimeClassName: nvidia
+      # Use host DNS to resolve huggingface.co (avoids cluster DNS resolution failures)
+      dnsPolicy: "Default"
       containers:
         - name: vllm
           image: vllm/vllm-openai:latest
