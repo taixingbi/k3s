@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Installs NVIDIA GPU Operator on the existing k3s cluster (Helm-based).
 #
-# Intended to run on gpu-node-2 (the k3s server), but it will manage the cluster remotely.
+# Intended to run on server-node-1 (the k3s server), but it will manage the cluster remotely.
 # Requires: curl, sudo, and network access to GitHub + NVIDIA Helm chart repo.
 #
 # Usage:
-#   cd /home/tb/Desktop/k3s
+#   cd /path/to/k3s
 #   sudo -E ./install-nvidia-gpu-operator.sh
 #
 # Environment overrides:
@@ -51,7 +51,7 @@ echo ""
 if ! command -v helm >/dev/null 2>&1; then
   echo "Helm not found; installing Helm 3 (client-side) ..."
   tmp_get_helm="$(mktemp)"
-  curl -fsSL -o "${tmp_get_helm}" https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3
+  curl -fsSL -o "${tmp_get_helm}" https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
   chmod 700 "${tmp_get_helm}"
   "${tmp_get_helm}"
   rm -f "${tmp_get_helm}"
@@ -84,28 +84,21 @@ HELM_WAIT_ARGS=(
 )
 
 # `helm status` does not support `--wait` / `--timeout`, so keep install/upgrade flags separate.
+HELM_OP_ARGS=(
+  "${HELM_BASE_ARGS[@]}"
+  "${HELM_WAIT_ARGS[@]}"
+  --version "${GPU_OPERATOR_VERSION}"
+  --set driver.enabled=false
+  --set toolkit.enabled=true
+  --set "toolkit.env[0].name=CONTAINERD_SOCKET"
+  --set "toolkit.env[0].value=${K3S_CONTAINERD_SOCKET}"
+  --set "toolkit.env[1].name=CONTAINERD_CONFIG"
+  --set "toolkit.env[1].value=${K3S_CONTAINERD_CONFIG}"
+)
 if helm status "${RELEASE_NAME}" "${HELM_BASE_ARGS[@]}" >/dev/null 2>&1; then
-  helm upgrade "${RELEASE_NAME}" nvidia/gpu-operator \
-    "${HELM_BASE_ARGS[@]}" \
-    "${HELM_WAIT_ARGS[@]}" \
-    --version "${GPU_OPERATOR_VERSION}" \
-    --set driver.enabled=false \
-    --set toolkit.enabled=true \
-    --set toolkit.env[0].name=CONTAINERD_SOCKET \
-    --set toolkit.env[0].value="${K3S_CONTAINERD_SOCKET}" \
-    --set toolkit.env[1].name=CONTAINERD_CONFIG \
-    --set toolkit.env[1].value="${K3S_CONTAINERD_CONFIG}"
+  helm upgrade "${RELEASE_NAME}" nvidia/gpu-operator "${HELM_OP_ARGS[@]}"
 else
-  helm install "${RELEASE_NAME}" nvidia/gpu-operator \
-    "${HELM_BASE_ARGS[@]}" \
-    "${HELM_WAIT_ARGS[@]}" \
-    --version "${GPU_OPERATOR_VERSION}" \
-    --set driver.enabled=false \
-    --set toolkit.enabled=true \
-    --set toolkit.env[0].name=CONTAINERD_SOCKET \
-    --set toolkit.env[0].value="${K3S_CONTAINERD_SOCKET}" \
-    --set toolkit.env[1].name=CONTAINERD_CONFIG \
-    --set toolkit.env[1].value="${K3S_CONTAINERD_CONFIG}"
+  helm install "${RELEASE_NAME}" nvidia/gpu-operator "${HELM_OP_ARGS[@]}"
 fi
 
 echo ""
@@ -138,5 +131,4 @@ k3s kubectl get pods -n "${GPU_OPERATOR_NAMESPACE}" -o wide 2>/dev/null || true
 
 echo ""
 echo "Next: apply the provided sample manifest to validate GPU scheduling:"
-echo "  sudo -E k3s kubectl apply -f gpu-vectoradd-sample.yaml"
-
+echo "  sudo k3s kubectl apply -f gpu-vectoradd-sample.yaml"

@@ -15,8 +15,8 @@ spec:
         app: vllm-qwen25-7b
     spec:
       automountServiceAccountToken: false
-      runtimeClassName: nvidia
-      nodeName: gpu-node-1
+      # GPU Operator injects runtime handling; avoid runtimeClassName to prevent Pod Security issues
+      # Schedules on any GPU node via resources.limits; remove nodeName for flexibility
       containers:
         - name: vllm
           image: vllm/vllm-openai:latest

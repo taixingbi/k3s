@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Install k3s server on gpu-node-2 (control plane).
+# Install k3s server on server-node-1 (control plane).
 # Run as root or with sudo on the server host.
 
-set -e
+set -euo pipefail
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "Run this script as root or with sudo." >&2
@@ -30,5 +30,5 @@ echo ""
 echo "On the agent host, run:"
 echo "  export K3S_URL=https://$(hostname -f 2>/dev/null || hostname):6443"
 echo "  export K3S_TOKEN=<token-above>"
-echo "  curl -sfL https://get.k3s.io | sh -s - agent"
+echo "  sudo -E ./install-k3s-agent.sh"
 echo ""

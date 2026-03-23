@@ -1,51 +1,62 @@
-# k3s Server (gpu-node-2) and Node (gpu-node-1)
+# k3s Server (server-node-1) and Agents (gpu-node-1, gpu-node-2)
 
-Scripts to run k3s with **gpu-node-2** as the server (control plane) and **gpu-node-1** as a node (agent).
+Scripts to run k3s with **server-node-1** as the server (control plane) and **gpu-node-1** and **gpu-node-2** as agents (worker nodes).
 
 ## Prerequisites
 
-- Root or sudo on both hosts
-- Network connectivity from gpu-node-1 to gpu-node-2 (port 6443)
-- If hostnames `gpu-node-2` and `gpu-node-1` are not resolvable, use IP addresses in `K3S_URL` and when verifying
+- Root or sudo on all hosts
+- Network connectivity from gpu-node-1 and gpu-node-2 to server-node-1 (port 6443)
+- If hostnames `server-node-1`, `gpu-node-1`, and `gpu-node-2` are not resolvable, use IP addresses in `K3S_URL` and when verifying
 - Optional: GPU drivers on the node if you need GPU workloads
 
-## Step 1: Install k3s server on gpu-node-2
+## Step 1: Install k3s server on server-node-1
 
-Copy `install-k3s-server.sh` to **gpu-node-2** and run it as root (or with sudo):
+Copy `install-k3s-server.sh` to **server-node-1** and run it as root (or with sudo):
 
 ```bash
 sudo ./install-k3s-server.sh
 ```
 
-When it finishes, it will print the **node token** and the **join URL**. Save the token; you need it for the agent.
+When it finishes, it will print the **node token** and the **join URL**. Save the token; you need it for the agents.
+K10337735b3793982cb8c66cb0fc2c95bbb8e9c16f8a0b1faa25a0330e7a0bf5a70::server:ff6b7aa08942eec8fb41be7d57f0dfe5
 
-## Step 2: Install k3s agent on gpu-node-1
+## Step 2: Install k3s agent on gpu-node-1 and gpu-node-2
 
-Copy `install-k3s-agent.sh` to **gpu-node-1**. Set the server URL and token from Step 1, then run:
+Copy `install-k3s-agent.sh` to both **gpu-node-1** and **gpu-node-2**. Run the following on **each** agent host.
+
+**On gpu-node-1:**
 
 ```bash
-export K3S_URL=https://gpu-node-2:6443
-export K3S_TOKEN=K10068f3ec7343811686d772c8567796565dbc7fbb198761056b8a36feea0bac1d5::server:b23373d01da11c5b1f38b94552c58cd4
+export K3S_URL=https://192.168.86.179:6443
+export K3S_TOKEN=K10337735b3793982cb8c66cb0fc2c95bbb8e9c16f8a0b1faa25a0330e7a0bf5a70::server:ff6b7aa08942eec8fb41be7d57f0dfe5
 sudo -E ./install-k3s-agent.sh
 ```
 
-If `gpu-node-2` is not resolvable from gpu-node-1, use the server’s IP:
+**On gpu-node-2:**
 
 ```bash
-export K3S_URL=https://192.168.86.176:6443
-export K3S_TOKEN=K10068f3ec7343811686d772c8567796565dbc7fbb198761056b8a36feea0bac1d5::server:b23373d01da11c5b1f38b94552c58cd4
+export K3S_URL=https://192.168.86.179:6443
+export K3S_TOKEN=K10337735b3793982cb8c66cb0fc2c95bbb8e9c16f8a0b1faa25a0330e7a0bf5a70::server:ff6b7aa08942eec8fb41be7d57f0dfe5
+sudo -E ./install-k3s-agent.sh
+```
+
+If `server-node-1` is not resolvable from the agents, use the server’s IP:
+
+```bash
+export K3S_URL=https://<server-node-1-IP>:6443
+export K3S_TOKEN=<token-from-step-1>
 sudo -E ./install-k3s-agent.sh
 ```
 
 ## Verification
 
-On **gpu-node-2** (the server), run:
+On **server-node-1** (the server), run:
 
 ```bash
 sudo k3s kubectl get nodes
 ```
 
-You should see both **gpu-node-2** (control-plane) and **gpu-node-1** (worker), and both in `Ready` once the agent has joined.
+You should see **server-node-1** (control-plane) plus **gpu-node-1** and **gpu-node-2** (workers), all in `Ready` once the agents have joined.
 
 ## Optional
 
@@ -59,14 +70,14 @@ GPU workloads require the Kubernetes NVIDIA stack (device plugin and container r
 ### Prerequisites
 
 - `nvidia-smi` works on each GPU node (`gpu-node-1` and `gpu-node-2`)
-- Your cluster is up and both nodes are `Ready` (see `Verification` above)
+- Your cluster is up and all nodes are `Ready` (see `Verification` above)
 
 ### Install NVIDIA GPU Operator
 
-Run on **gpu-node-2**:
+Run on **server-node-1**:
 
 ```bash
-cd /home/tb/Desktop/k3s
+cd /path/to/k3s
 sudo -E ./install-nvidia-gpu-operator.sh
 ```
 
@@ -80,7 +91,7 @@ This installs the NVIDIA GPU Operator via Helm and configures it to use your pre
 
 ### Verify device plugin + GPU allocatable
 
-On **gpu-node-2**, run:
+On **server-node-1**, run:
 
 ```bash
 sudo k3s kubectl get pods -n gpu-operator -o wide | grep -i nvidia || true
@@ -92,7 +103,7 @@ You want the allocatable value to be a number (for the 3090 it should typically 
 
 ### Run a GPU test pod
 
-Run the included sample (vector add) on **gpu-node-2**:
+Run the included sample (vector add) on **server-node-1**:
 
 ```bash
 sudo k3s kubectl apply -f gpu-vectoradd-sample.yaml
@@ -101,7 +112,7 @@ sudo k3s kubectl get pods -A -o wide | grep -i vectoradd || true
 
 If the GPU Operator is working, the pod will schedule on one of the GPU nodes and move to `Running` briefly (then it may exit depending on the sample behavior).
 
-### vLLM (Qwen2.5-7B-Instruct on gpu-node-1)
+### vLLM (Qwen2.5-7B-Instruct on GPU nodes)
 
 Manifest: `vllm-qwen2.5-7b-instruct.yaml` (Deployment name is **`vllm-qwen25-7b`** — no dots, valid DNS labels).
 
@@ -119,11 +130,11 @@ If `port-forward` says the pod is **Pending**, check events:
 sudo k3s kubectl describe pod -l app=vllm-qwen25-7b
 ```
 
-Common causes: GPU not allocatable on `gpu-node-1`, image still pulling, or admission errors.
+Common causes: GPU not allocatable on GPU nodes, image still pulling, or admission errors.
 
 If pods show **`UnexpectedAdmissionError`**, the manifest is adjusted to avoid common Pod Security violations:
 
-1. Do not set `runtimeClassName: nvidia` (GPU Operator already injects runtime handling)
+1. The manifest omits `runtimeClassName: nvidia` (GPU Operator injects runtime handling)
 2. Avoid `hostIPC: true` (Pod Security often blocks it)
 
 Re-apply after cleanup:
@@ -140,20 +151,18 @@ Remove an old deployment if you applied an earlier revision with a dotted name:
 sudo k3s kubectl delete deployment vllm-qwen2.5-7b --ignore-not-found
 ```
 
-### Expose the vLLM Deployment with a NodePort Service.
+### Expose the vLLM Deployment with a NodePort Service
 
-Run on your k3s server node:
+Run on **server-node-1**:
 
-# 1) Create NodePort service for vLLM deployment
 ```bash
+# 1) Create NodePort service for vLLM deployment
 sudo k3s kubectl expose deployment vllm-qwen25-7b \
   --name vllm-qwen25-7b-svc \
   --type NodePort \
   --port 8000 \
   --target-port 8000
-```
 
 # 2) Get the assigned node port
-```bash
 sudo k3s kubectl get svc vllm-qwen25-7b-svc -o wide
 ```
