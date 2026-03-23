@@ -27,7 +27,7 @@ Copy `install-k3s-agent.sh` to both **gpu-node-1** and **gpu-node-2**. Run the f
 **On gpu-node-1:**
 
 ```bash
-export K3S_URL=https://192.168.86.179:6443
+export K3S_URL=https://server-node-1.lan:6443
 export K3S_TOKEN=K10337735b3793982cb8c66cb0fc2c95bbb8e9c16f8a0b1faa25a0330e7a0bf5a70::server:ff6b7aa08942eec8fb41be7d57f0dfe5
 sudo -E ./install-k3s-agent.sh
 ```
@@ -35,7 +35,7 @@ sudo -E ./install-k3s-agent.sh
 **On gpu-node-2:**
 
 ```bash
-export K3S_URL=https://192.168.86.179:6443
+export K3S_URL=https://server-node-2.lan:6443
 export K3S_TOKEN=K10337735b3793982cb8c66cb0fc2c95bbb8e9c16f8a0b1faa25a0330e7a0bf5a70::server:ff6b7aa08942eec8fb41be7d57f0dfe5
 sudo -E ./install-k3s-agent.sh
 ```
