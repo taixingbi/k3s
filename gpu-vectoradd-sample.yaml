@@ -1,0 +1,15 @@
+# Simple GPU validation: runs nvidia-smi to verify GPU is allocatable and accessible.
+# Apply after NVIDIA GPU Operator is installed and GPU nodes show nvidia.com/gpu allocatable.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cuda-vectoradd
+spec:
+  restartPolicy: OnFailure
+  containers:
+    - name: cuda-vectoradd
+      image: nvidia/cuda:12.0.0-runtime-ubuntu22.04
+      command: ["nvidia-smi"]
+      resources:
+        limits:
+          nvidia.com/gpu: "1"

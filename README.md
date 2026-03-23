@@ -2,6 +2,12 @@
 
 Scripts to run k3s with **server-node-1** as the server (control plane) and **gpu-node-1** and **gpu-node-2** as agents (worker nodes).
 
+| Host           | IP             | Role        |
+|----------------|----------------|-------------|
+| server-node-1  | 192.168.86.179  | k3s server  |
+| gpu-node-1     | 192.168.86.173  | k3s agent   |
+| gpu-node-2     | 192.168.86.176  | k3s agent   |
+
 ## Prerequisites
 
 - Root or sudo on all hosts
@@ -16,9 +22,9 @@ Copy `install-k3s-server.sh` to **server-node-1** and run it as root (or with su
 ```bash
 sudo ./install-k3s-server.sh
 ```
+K10337735b3793982cb8c66cb0fc2c95bbb8e9c16f8a0b1faa25a0330e7a0bf5a70::server:ff6b7aa08942eec8fb41be7d57f0dfe5
 
 When it finishes, it will print the **node token** and the **join URL**. Save the token; you need it for the agents.
-K10337735b3793982cb8c66cb0fc2c95bbb8e9c16f8a0b1faa25a0330e7a0bf5a70::server:ff6b7aa08942eec8fb41be7d57f0dfe5
 
 ## Step 2: Install k3s agent on gpu-node-1 and gpu-node-2
 
@@ -35,15 +41,15 @@ sudo -E ./install-k3s-agent.sh
 **On gpu-node-2:**
 
 ```bash
-export K3S_URL=https://server-node-2.lan:6443
-export K3S_TOKEN=K10337735b3793982cb8c66cb0fc2c95bbb8e9c16f8a0b1faa25a0330e7a0bf5a70::server:ff6b7aa08942eec8fb41be7d57f0dfe5
+export K3S_URL=https://server-node-1.lan:6443
+export K3S_TOKEN=<token-from-step-1>
 sudo -E ./install-k3s-agent.sh
 ```
 
 If `server-node-1` is not resolvable from the agents, use the server’s IP:
 
 ```bash
-export K3S_URL=https://<server-node-1-IP>:6443
+export K3S_URL=https://192.168.86.179:6443
 export K3S_TOKEN=<token-from-step-1>
 sudo -E ./install-k3s-agent.sh
 ```
