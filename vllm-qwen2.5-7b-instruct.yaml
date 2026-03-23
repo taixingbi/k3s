@@ -31,6 +31,8 @@ spec:
             - "8000"
             - --gpu-memory-utilization
             - "0.7"
+            - --max-model-len
+            - "8192"
           ports:
             - name: http
               containerPort: 8000
