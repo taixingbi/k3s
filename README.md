@@ -197,3 +197,17 @@ sudo k3s kubectl expose deployment vllm-qwen25-7b \
 # 2) Get the assigned node port
 sudo k3s kubectl get svc vllm-qwen25-7b-svc -o wide
 ```
+
+### Test the vLLM API
+
+Use the NodePort from any machine that can reach the GPU node (e.g. gpu-node-1 at 192.168.86.173). Replace `<NodePort>` with the port from `kubectl get svc` (e.g. 31769):
+
+```bash
+# List models
+curl http://192.168.86.173:31769/v1/models
+
+# Chat completion
+curl http://192.168.86.173:31769/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "Where is New York City?"}], "max_tokens": 50}'
+```
