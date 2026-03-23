@@ -101,6 +101,18 @@ else
   helm install "${RELEASE_NAME}" nvidia/gpu-operator "${HELM_OP_ARGS[@]}"
 fi
 
+# Patch device plugin to use nvidia runtime (required on k3s so the plugin can see GPUs)
+echo ""
+echo "Patching device plugin DaemonSet with runtimeClassName: nvidia ..."
+if k3s kubectl get daemonset nvidia-device-plugin-daemonset -n "${GPU_OPERATOR_NAMESPACE}" &>/dev/null; then
+  k3s kubectl patch daemonset nvidia-device-plugin-daemonset -n "${GPU_OPERATOR_NAMESPACE}" \
+    --type=merge \
+    -p='{"spec":{"template":{"spec":{"runtimeClassName":"nvidia"}}}}' 2>/dev/null || \
+  k3s kubectl patch daemonset nvidia-device-plugin-daemonset -n "${GPU_OPERATOR_NAMESPACE}" \
+    --type='json' \
+    -p='[{"op":"add","path":"/spec/template/spec/runtimeClassName","value":"nvidia"}]' 2>/dev/null || true
+fi
+
 echo ""
 IFS=',' read -r -a gpu_nodes <<< "${GPU_NODE_NAMES}"
 for gpu_node in "${gpu_nodes[@]}"; do

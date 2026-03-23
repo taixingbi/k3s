@@ -42,7 +42,7 @@ sudo -E ./install-k3s-agent.sh
 
 ```bash
 export K3S_URL=https://server-node-1.lan:6443
-export K3S_TOKEN=<token-from-step-1>
+K3S_TOKEN=K10337735b3793982cb8c66cb0fc2c95bbb8e9c16f8a0b1faa25a0330e7a0bf5a70::server:ff6b7aa08942eec8fb41be7d57f0dfe5
 sudo -E ./install-k3s-agent.sh
 ```
 
@@ -75,7 +75,7 @@ GPU workloads require the Kubernetes NVIDIA stack (device plugin and container r
 
 ### Prerequisites
 
-- `nvidia-smi` works on each GPU node (`gpu-node-1` and `gpu-node-2`)
+- `nvidia-smi` works on each GPU node you use (e.g. `gpu-node-1`); `gpu-node-2` GPU setup can be done later
 - Your cluster is up and all nodes are `Ready` (see `Verification` above)
 
 ### Install NVIDIA GPU Operator
@@ -108,6 +108,18 @@ sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade --install nvidia-gpu-oper
   --set "toolkit.env[1].value=/run/k3s/containerd/containerd.sock"
 ```
 
+### Reinstall GPU Operator on a node (e.g. gpu-node-2)
+
+If a node shows `nvidia.com/gpu: 1` allocatable but pods fail with "Available: 0", the device plugin may be running without the nvidia runtime and cannot see the GPU. Reinstall GPU operator components on that node:
+
+```bash
+# Run on server-node-1
+cd /path/to/k3s
+sudo -E ./reinstall-gpu-operator-node.sh gpu-node-2
+```
+
+The script cordons the node, deletes GPU operator pods, patches the device plugin DaemonSet with `runtimeClassName: nvidia`, and uncordons. On **gpu-node-2**, optionally restart k3s-agent: `sudo systemctl restart k3s-agent`.
+
 ### Verify device plugin + GPU allocatable
 
 On **server-node-1**, run:
@@ -115,7 +127,8 @@ On **server-node-1**, run:
 ```bash
 sudo k3s kubectl get pods -n gpu-operator -o wide | grep -i nvidia || true
 sudo k3s kubectl get node gpu-node-1 -o go-template='{{index .status.allocatable "nvidia.com/gpu"}}{{"\n"}}'
-sudo k3s kubectl get node gpu-node-2 -o go-template='{{index .status.allocatable "nvidia.com/gpu"}}{{"\n"}}'
+# Optional, when gpu-node-2 GPU is deployed:
+# sudo k3s kubectl get node gpu-node-2 -o go-template='{{index .status.allocatable "nvidia.com/gpu"}}{{"\n"}}'
 ```
 
 You want the allocatable value to be a number (for the 3090 it should typically be `1` unless you’re using MIG/time-slicing).
@@ -205,9 +218,59 @@ Use the NodePort from any machine that can reach the GPU node (e.g. gpu-node-1 a
 ```bash
 # List models
 curl http://192.168.86.173:31769/v1/models
+curl http://192.168.86.176:31769/v1/models
 
 # Chat completion
 curl http://192.168.86.173:31769/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "Where is New York City?"}], "max_tokens": 50}'
 ```
+
+### Scaling to 2 replicas (both GPU nodes)
+
+To run vLLM on both gpu-node-1 and gpu-node-2:
+
+```bash
+sudo k3s kubectl scale deployment vllm-qwen25-7b --replicas=2
+sudo k3s kubectl get pods -l app=vllm-qwen25-7b -o wide
+```
+
+If one pod stays **Pending**, gpu-node-2’s device plugin may report 0 available GPUs (even though allocatable shows 1). See *Troubleshooting* below.
+
+### Troubleshooting
+
+**Second pod Pending when scaling vLLM to 2 replicas**
+
+Symptom: One pod runs on gpu-node-1, the other stays Pending. Events show:
+`Allocate failed due to requested number of devices unavailable for nvidia.com/gpu. Requested: 1, Available: 0`
+
+Cause: The device plugin on gpu-node-2 runs **without the nvidia runtime**, so containerd does not give it access to the GPU. The plugin cannot see GPUs and reports 0 available.
+
+**Primary fix** – Reinstall GPU operator on gpu-node-2 (patches device plugin with `runtimeClassName: nvidia`):
+
+```bash
+sudo -E ./reinstall-gpu-operator-node.sh gpu-node-2
+```
+
+On **gpu-node-2**, optionally restart k3s-agent: `sudo systemctl restart k3s-agent`.
+
+**Alternative** – Manual device plugin restart (may help if the patch is already applied):
+
+```bash
+DEVICE_PLUGIN_POD=$(sudo k3s kubectl get pods -n gpu-operator -o wide | grep device-plugin | grep gpu-node-2 | awk '{print $1}')
+sudo k3s kubectl delete pod "$DEVICE_PLUGIN_POD" -n gpu-operator
+sleep 90
+sudo k3s kubectl get pods -l app=vllm-qwen25-7b -o wide
+```
+
+**If the second pod still stays Pending:** gpu-node-2 may have a different driver (e.g. 535.x) than gpu-node-1 (590.x). Workarounds:
+
+1. **Upgrade the driver on gpu-node-2** to match gpu-node-1 (e.g. 535 → 590).
+2. **Run with 1 replica** until gpu-node-2 is fixed:
+   ```bash
+   sudo k3s kubectl scale deployment vllm-qwen25-7b --replicas=1
+   ```
+3. **Force vLLM onto gpu-node-1 only** (for 1 replica):
+   ```bash
+   sudo k3s kubectl patch deployment vllm-qwen25-7b -p '{"spec":{"template":{"spec":{"nodeSelector":{"kubernetes.io/hostname":"gpu-node-1"}}}}}'
+   ```
