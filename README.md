@@ -1,278 +1,230 @@
 # k3s Server (server-node-1) and Agents (gpu-node-1, gpu-node-2)
 
-Scripts to run k3s with **server-node-1** as the server (control plane) and **gpu-node-1** and **gpu-node-2** as agents (worker nodes).
+Scripts and manifests for **server-node-1** as the k3s control plane and **gpu-node-1** / **gpu-node-2** as GPU workers.
 
 | Host           | IP             | Role        |
 |----------------|----------------|-------------|
-| server-node-1  | 192.168.86.179  | k3s server  |
-| gpu-node-1     | 192.168.86.173  | k3s agent   |
-| gpu-node-2     | 192.168.86.176  | k3s agent   |
+| server-node-1  | 192.168.86.179 | k3s server  |
+| gpu-node-1     | 192.168.86.173 | k3s agent   |
+| gpu-node-2     | 192.168.86.176 | k3s agent   |
+
+## Repository layout
+
+| File | Purpose |
+|------|---------|
+| `install-k3s-server.sh` | Install k3s server; prints join URL and token |
+| `install-k3s-agent.sh` | Join agent using `K3S_URL` + `K3S_TOKEN` |
+| `install-nvidia-gpu-operator.sh` | Helm install GPU Operator (k3s containerd paths + device-plugin `runtimeClassName` patch) |
+| `gpu-vectoradd-sample.yaml` | One-off pod: `nvidia-smi` to validate GPU scheduling |
+| `inference-qwen25-7b.yaml` | Namespace `ai`, vLLM Qwen2.5-7B (2 replicas), Service NodePort **30080** |
+| `tmp.md` | Local scratch notes (not part of install docs) |
 
 ## Prerequisites
 
 - Root or sudo on all hosts
-- Network connectivity from gpu-node-1 and gpu-node-2 to server-node-1 (port 6443)
-- If hostnames `server-node-1`, `gpu-node-1`, and `gpu-node-2` are not resolvable, use IP addresses in `K3S_URL` and when verifying
-- Optional: GPU drivers on the node if you need GPU workloads
+- Agents can reach server-node-1 on **6443**
+- Use hostnames or IPs in `K3S_URL` depending on your DNS
+- NVIDIA driver installed on each GPU node before GPU workloads (`nvidia-smi` on the host)
 
 ## Step 1: Install k3s server on server-node-1
-
-Copy `install-k3s-server.sh` to **server-node-1** and run it as root (or with sudo):
 
 ```bash
 sudo ./install-k3s-server.sh
 ```
-K10337735b3793982cb8c66cb0fc2c95bbb8e9c16f8a0b1faa25a0330e7a0bf5a70::server:ff6b7aa08942eec8fb41be7d57f0dfe5
 
-When it finishes, it will print the **node token** and the **join URL**. Save the token; you need it for the agents.
+When it finishes, it prints the **node token** and **join URL**. Use that token wherever this README shows `<K3S_TOKEN>`.
+
+If k3s is already running, the script prints the token from `/var/lib/rancher/k3s/server/node-token` and exits.
 
 ## Step 2: Install k3s agent on gpu-node-1 and gpu-node-2
 
-Copy `install-k3s-agent.sh` to both **gpu-node-1** and **gpu-node-2**. Run the following on **each** agent host.
-
-**On gpu-node-1:**
+On **each** agent host (copy `install-k3s-agent.sh` first):
 
 ```bash
 export K3S_URL=https://server-node-1.lan:6443
-export K3S_TOKEN=K10337735b3793982cb8c66cb0fc2c95bbb8e9c16f8a0b1faa25a0330e7a0bf5a70::server:ff6b7aa08942eec8fb41be7d57f0dfe5
+export K3S_TOKEN=<K3S_TOKEN>
 sudo -E ./install-k3s-agent.sh
 ```
 
-**On gpu-node-2:**
-
-```bash
-export K3S_URL=https://server-node-1.lan:6443
-K3S_TOKEN=K10337735b3793982cb8c66cb0fc2c95bbb8e9c16f8a0b1faa25a0330e7a0bf5a70::server:ff6b7aa08942eec8fb41be7d57f0dfe5
-sudo -E ./install-k3s-agent.sh
-```
-
-If `server-node-1` is not resolvable from the agents, use the server’s IP:
+If the server hostname is not resolvable:
 
 ```bash
 export K3S_URL=https://192.168.86.179:6443
-export K3S_TOKEN=<token-from-step-1>
+export K3S_TOKEN=<K3S_TOKEN>
 sudo -E ./install-k3s-agent.sh
 ```
 
 ## Verification
 
-On **server-node-1** (the server), run:
+On **server-node-1**:
 
 ```bash
 sudo k3s kubectl get nodes
 ```
 
-You should see **server-node-1** (control-plane) plus **gpu-node-1** and **gpu-node-2** (workers), all in `Ready` once the agents have joined.
+Expect **server-node-1** (control-plane) and both GPU workers **Ready**.
+
+### kubectl: run on the server
+
+Use `sudo k3s kubectl …` on **server-node-1**. Agents do not run the API server; `kubectl` on a worker without `KUBECONFIG=/etc/rancher/k3s/k3s.yaml` (copied from the server) fails with `localhost:8080` connection refused.
 
 ## Optional
 
-- To pin the k3s version, set `INSTALL_K3S_CHANNEL` (e.g. `v1.28`) before running the install script.
-- Scripts are idempotent: running them again skips install if k3s is already installed and running.
+- Pin k3s channel: `export INSTALL_K3S_CHANNEL=v1.34` (or similar) before `install-k3s-server.sh` / agent install via get.k3s.io
+- Scripts are idempotent when k3s is already installed and running
 
-## GPU Support (NVIDIA 3090)
+## GPU support (NVIDIA, e.g. RTX 3090)
 
-GPU workloads require the Kubernetes NVIDIA stack (device plugin and container runtime integration).
-
-### Prerequisites
-
-- `nvidia-smi` works on each GPU node you use (e.g. `gpu-node-1`); `gpu-node-2` GPU setup can be done later
-- Your cluster is up and all nodes are `Ready` (see `Verification` above)
+GPU workloads need the NVIDIA device plugin and container runtime integration on each GPU node.
 
 ### Install NVIDIA GPU Operator
 
-Run on **server-node-1**:
+On **server-node-1**:
 
 ```bash
 cd /path/to/k3s
 sudo -E ./install-nvidia-gpu-operator.sh
 ```
 
-This installs the NVIDIA GPU Operator via Helm and configures it to use your pre-installed driver:
+The script:
 
-- `driver.enabled=false`
-- `toolkit.enabled=true`
-- k3s containerd paths:
-  - socket: `/run/k3s/containerd/containerd.sock`
-  - config: `/var/lib/rancher/k3s/agent/etc/containerd/config.toml`
+- Sets `driver.enabled=false`, `toolkit.enabled=true`
+- Points the toolkit at k3s containerd: socket `/run/k3s/containerd/containerd.sock`, config `/var/lib/rancher/k3s/agent/etc/containerd/config.toml`
+- Patches DaemonSet `nvidia-device-plugin-daemonset` with `runtimeClassName: nvidia` (needed on k3s so the plugin can see GPUs)
 
-**Manual Helm upgrade** (if needed, use release name `nvidia-gpu-operator` to match the install script):
+Environment overrides: `GPU_OPERATOR_VERSION`, `GPU_OPERATOR_NAMESPACE`, `GPU_NODE_NAMES`, `K3S_CONTAINERD_SOCKET`, `K3S_CONTAINERD_CONFIG` (see script header).
+
+**Manual Helm** (same release name `nvidia-gpu-operator`; env order matches the script):
 
 ```bash
 sudo KUBECONFIG=/etc/rancher/k3s/k3s.yaml helm upgrade --install nvidia-gpu-operator nvidia/gpu-operator \
-  -n gpu-operator \
+  -n gpu-operator --create-namespace \
   --set driver.enabled=false \
   --set toolkit.enabled=true \
-  --set "toolkit.env[0].name=CONTAINERD_CONFIG" \
-  --set "toolkit.env[0].value=/var/lib/rancher/k3s/agent/etc/containerd/config.toml" \
-  --set "toolkit.env[1].name=CONTAINERD_SOCKET" \
-  --set "toolkit.env[1].value=/run/k3s/containerd/containerd.sock"
+  --set "toolkit.env[0].name=CONTAINERD_SOCKET" \
+  --set "toolkit.env[0].value=/run/k3s/containerd/containerd.sock" \
+  --set "toolkit.env[1].name=CONTAINERD_CONFIG" \
+  --set "toolkit.env[1].value=/var/lib/rancher/k3s/agent/etc/containerd/config.toml"
 ```
 
-### Reinstall GPU Operator on a node (e.g. gpu-node-2)
-
-If a node shows `nvidia.com/gpu: 1` allocatable but pods fail with "Available: 0", the device plugin may be running without the nvidia runtime and cannot see the GPU. Reinstall GPU operator components on that node:
+Then apply the device-plugin patch (same as the install script):
 
 ```bash
-# Run on server-node-1
-cd /path/to/k3s
-sudo -E ./reinstall-gpu-operator-node.sh gpu-node-2
+sudo k3s kubectl patch daemonset nvidia-device-plugin-daemonset -n gpu-operator \
+  --type=merge \
+  -p='{"spec":{"template":{"spec":{"runtimeClassName":"nvidia"}}}}'
 ```
 
-The script cordons the node, deletes GPU operator pods, patches the device plugin DaemonSet with `runtimeClassName: nvidia`, and uncordons. On **gpu-node-2**, optionally restart k3s-agent: `sudo systemctl restart k3s-agent`.
+### Reset GPU operator pods on one node
 
-### Verify device plugin + GPU allocatable
-
-On **server-node-1**, run:
+If a node shows `nvidia.com/gpu` allocatable but workloads get `Available: 0` at admission time:
 
 ```bash
-sudo k3s kubectl get pods -n gpu-operator -o wide | grep -i nvidia || true
-sudo k3s kubectl get node gpu-node-1 -o go-template='{{index .status.allocatable "nvidia.com/gpu"}}{{"\n"}}'
-# Optional, when gpu-node-2 GPU is deployed:
-# sudo k3s kubectl get node gpu-node-2 -o go-template='{{index .status.allocatable "nvidia.com/gpu"}}{{"\n"}}'
+sudo k3s kubectl cordon gpu-node-2
+for pod in $(sudo k3s kubectl get pods -n gpu-operator -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.nodeName}{"\n"}{end}' | awk -v n=gpu-node-2 '$2==n {print $1}'); do
+  sudo k3s kubectl delete pod "$pod" -n gpu-operator --force --grace-period=0
+done
+sudo k3s kubectl uncordon gpu-node-2
 ```
 
-You want the allocatable value to be a number (for the 3090 it should typically be `1` unless you’re using MIG/time-slicing).
+On **gpu-node-2**: `sudo systemctl restart k3s-agent` if the toolkit just updated containerd config.
 
-### Run a GPU test pod
+### Verify allocatable GPU
 
-Run the included sample (vector add) on **server-node-1**:
+```bash
+sudo k3s kubectl get nodes -o custom-columns='NAME:.metadata.name,GPU:.status.allocatable.nvidia\.com/gpu'
+sudo k3s kubectl get pods -n gpu-operator -o wide | grep device-plugin
+```
+
+### GPU smoke test
 
 ```bash
 sudo k3s kubectl apply -f gpu-vectoradd-sample.yaml
-sudo k3s kubectl get pods -A -o wide | grep -i vectoradd || true
+sudo k3s kubectl get pods -A -o wide | grep -i vectoradd
+sudo k3s kubectl logs cuda-vectoradd
+sudo k3s kubectl delete pod cuda-vectoradd
 ```
 
-If the GPU Operator is working, the pod will schedule on one of the GPU nodes and move to `Running` briefly (then it may exit depending on the sample behavior).
+## vLLM: Qwen2.5-7B-Instruct (`inference-qwen25-7b.yaml`)
 
-### vLLM (Qwen2.5-7B-Instruct on GPU nodes)
+Single manifest: namespace **`ai`**, Deployment **`inference-qwen25-7b`**, **2 replicas**, rolling strategy `maxSurge: 0` / `maxUnavailable: 1` (avoids a third pod when you only have two GPUs). Service **`inference-qwen25-7b`**, **NodePort 30080** → container port 8000.
 
-Manifest: `vllm-qwen2.5-7b-instruct.yaml` (Deployment name is **`vllm-qwen25-7b`** — no dots, valid DNS labels).
+Pod spec: `runtimeClassName: nvidia`, `dnsPolicy: Default`, optional pod anti-affinity across hosts, readiness probe on `/health` (long initial delay for model load), `HF_HUB_ENABLE_HF_TRANSFER=1`.
+
+Apply on **server-node-1**:
 
 ```bash
-sudo k3s kubectl apply -f vllm-qwen2.5-7b-instruct.yaml
-# Wait until Running (image pull + model download can take many minutes)
-sudo k3s kubectl get pods -l app=vllm-qwen25-7b -o wide -w
-# Only then:
-sudo k3s kubectl port-forward deployment/vllm-qwen25-7b 8000:8000
+sudo k3s kubectl apply -f inference-qwen25-7b.yaml
+sudo k3s kubectl get pods -n ai -o wide -w
+sudo k3s kubectl get svc -n ai
 ```
 
-If `port-forward` says the pod is **Pending**, check events:
+**Scale** (still use `maxSurge: 0` in the manifest):
 
 ```bash
-sudo k3s kubectl describe pod -l app=vllm-qwen25-7b
+sudo k3s kubectl scale deployment inference-qwen25-7b -n ai --replicas=1
+sudo k3s kubectl scale deployment inference-qwen25-7b -n ai --replicas=2
 ```
 
-Common causes: GPU not allocatable on GPU nodes, image still pulling, or admission errors.
+### Call the API
 
-**If pod is in `Error` or `CrashLoopBackOff`**, check logs and events:
-
-```bash
-sudo k3s kubectl logs -l app=vllm-qwen25-7b --tail=100
-sudo k3s kubectl describe pod -l app=vllm-qwen25-7b | tail -60
-```
-
-Typical fixes:
-- **OOM**: Reduce `--gpu-memory-utilization` (e.g. `0.5`) or use a smaller model
-- **Model download fails / "Failed to resolve huggingface.co"**: Pod DNS issue. The manifest uses `dnsPolicy: Default` to use the node's DNS. If it still fails, pre-download the model on the GPU node and use `--model /path/to/model` with a volume mount.
-- **CUDA error**: Verify `nvidia-smi` works on the GPU node; ensure NVIDIA driver version matches container
-
-If pods show **`UnexpectedAdmissionError`**, the manifest is adjusted to avoid common Pod Security violations:
-
-1. The manifest omits `runtimeClassName: nvidia` (GPU Operator injects runtime handling)
-2. Avoid `hostIPC: true` (Pod Security often blocks it)
-
-Re-apply after cleanup:
+Use a node IP where NodePort works (usually **GPU nodes**, not always the control plane):
 
 ```bash
-sudo k3s kubectl delete deployment vllm-qwen25-7b --ignore-not-found
-sudo k3s kubectl delete pods -l app=vllm-qwen25-7b --force --grace-period=0 2>/dev/null || true
-sudo k3s kubectl apply -f vllm-qwen2.5-7b-instruct.yaml
-```
-
-Remove an old deployment if you applied an earlier revision with a dotted name:
-
-```bash
-sudo k3s kubectl delete deployment vllm-qwen2.5-7b --ignore-not-found
-```
-
-### Expose the vLLM Deployment with a NodePort Service
-
-Run on **server-node-1**:
-
-```bash
-# 1) Create NodePort service for vLLM deployment
-sudo k3s kubectl expose deployment vllm-qwen25-7b \
-  --name vllm-qwen25-7b-svc \
-  --type NodePort \
-  --port 8000 \
-  --target-port 8000
-
-# 2) Get the assigned node port
-sudo k3s kubectl get svc vllm-qwen25-7b-svc -o wide
-```
-
-### Test the vLLM API
-
-Use the NodePort from any machine that can reach the GPU node (e.g. gpu-node-1 at 192.168.86.173). Replace `<NodePort>` with the port from `kubectl get svc` (e.g. 31769):
-
-```bash
-# List models
-curl http://192.168.86.173:31769/v1/models
-curl http://192.168.86.176:31769/v1/models
-
-# Chat completion
-curl http://192.168.86.173:31769/v1/chat/completions \
+curl http://192.168.86.173:30080/v1/models
+curl http://192.168.86.173:30080/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "Where is New York City?"}], "max_tokens": 50}'
+  -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "Hello"}], "max_tokens": 50}'
 ```
 
-### Scaling to 2 replicas (both GPU nodes)
-
-The manifest uses `maxSurge: 0, maxUnavailable: 1` so rolling updates don't spawn a 3rd pod (default maxSurge=25% would deadlock with only 2 GPUs).
-
-To run vLLM on both gpu-node-1 and gpu-node-2:
+Port **8000** is only inside the pod unless you use NodePort or `port-forward`:
 
 ```bash
-sudo k3s kubectl scale deployment vllm-qwen25-7b --replicas=2
-sudo k3s kubectl get pods -l app=vllm-qwen25-7b -o wide
+sudo k3s kubectl port-forward -n ai svc/inference-qwen25-7b 8000:8000
 ```
 
-If one pod stays **Pending**, gpu-node-2’s device plugin may report 0 available GPUs (even though allocatable shows 1). See *Troubleshooting* below.
+### NodePort and the control plane
 
-### Troubleshooting
+**server-node-1** may not accept NodePort traffic to its own IP even when iptables allows it. Prefer **192.168.86.173** / **192.168.86.176** for `curl`, or `port-forward` from the server.
 
-**Second pod Pending when scaling vLLM to 2 replicas**
+## Troubleshooting
 
-Symptom: One pod runs on gpu-node-1, the other stays Pending. Events show:
-`Allocate failed due to requested number of devices unavailable for nvidia.com/gpu. Requested: 1, Available: 0`
+**`UnexpectedAdmissionError` / `Available: 0` for `nvidia.com/gpu`**
 
-Cause: The device plugin on gpu-node-2 runs **without the nvidia runtime**, so containerd does not give it access to the GPU. The plugin cannot see GPUs and reports 0 available.
-
-**Primary fix** – Reinstall GPU operator on gpu-node-2 (patches device plugin with `runtimeClassName: nvidia`):
+- Ensure device plugin DaemonSet has `runtimeClassName: nvidia` (install script or patch above).
+- Restart the device plugin pod on that node; on the agent, `sudo systemctl restart k3s-agent` after toolkit changes.
+- Remove stray GPU test pods in `default` (e.g. `cuda-vectoradd`, manual `gpu-probe*`) that still request a GPU:
 
 ```bash
-sudo -E ./reinstall-gpu-operator-node.sh gpu-node-2
+sudo k3s kubectl get pods -A --field-selector spec.nodeName=gpu-node-2 -o wide
 ```
 
-On **gpu-node-2**, optionally restart k3s-agent: `sudo systemctl restart k3s-agent`.
+**Second replica Pending; scheduler: insufficient GPU**
 
-**Alternative** – Manual device plugin restart (may help if the patch is already applied):
+- Rolling update deadlock: keep `maxSurge: 0` (already in `inference-qwen25-7b.yaml`).
+- Unblock with: scale to 0 → wait for pods gone → scale back to 2.
+
+**CUDA error 804 on one node**
+
+- Align NVIDIA driver versions across GPU nodes with what the vLLM image expects (e.g. 590.x on both).
+
+**`modprobe nvidia`: Key was rejected**
+
+- Disable **Secure Boot** or use Ubuntu signed `linux-modules-nvidia-*` for your kernel.
+
+**k3s-agent: `bind: address already in use` on 127.0.0.1:6444**
 
 ```bash
-DEVICE_PLUGIN_POD=$(sudo k3s kubectl get pods -n gpu-operator -o wide | grep device-plugin | grep gpu-node-2 | awk '{print $1}')
-sudo k3s kubectl delete pod "$DEVICE_PLUGIN_POD" -n gpu-operator
-sleep 90
-sudo k3s kubectl get pods -l app=vllm-qwen25-7b -o wide
+sudo lsof -i :6444
+sudo kill -9 <PID>   # or: sudo pkill -9 k3s
+sudo systemctl start k3s-agent
 ```
 
-**If the second pod still stays Pending:** gpu-node-2 may have a different driver (e.g. 535.x) than gpu-node-1 (590.x). Workarounds:
+**Logs for inference pods**
 
-1. **Upgrade the driver on gpu-node-2** to match gpu-node-1 (e.g. 535 → 590).
-2. **Run with 1 replica** until gpu-node-2 is fixed:
-   ```bash
-   sudo k3s kubectl scale deployment vllm-qwen25-7b --replicas=1
-   ```
-3. **Force vLLM onto gpu-node-1 only** (for 1 replica):
-   ```bash
-   sudo k3s kubectl patch deployment vllm-qwen25-7b -p '{"spec":{"template":{"spec":{"nodeSelector":{"kubernetes.io/hostname":"gpu-node-1"}}}}}'
-   ```
+```bash
+sudo k3s kubectl logs -n ai -l app=inference-qwen25-7b --tail=100
+sudo k3s kubectl describe pod -n ai -l app=inference-qwen25-7b
+```
+
+Typical issues: OOM / reduce `--gpu-memory-utilization`; Hugging Face DNS — `dnsPolicy: Default` is set; model download time — readiness probe allows long startup.
