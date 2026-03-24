@@ -6,6 +6,12 @@ metadata:
     app: vllm-qwen25-7b
 spec:
   replicas: 1
+  # For GPU workloads: maxSurge=0 avoids spawning extra pod when total GPUs are limited
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: vllm-qwen25-7b

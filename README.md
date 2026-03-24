@@ -228,6 +228,8 @@ curl http://192.168.86.173:31769/v1/chat/completions \
 
 ### Scaling to 2 replicas (both GPU nodes)
 
+The manifest uses `maxSurge: 0, maxUnavailable: 1` so rolling updates don't spawn a 3rd pod (default maxSurge=25% would deadlock with only 2 GPUs).
+
 To run vLLM on both gpu-node-1 and gpu-node-2:
 
 ```bash
