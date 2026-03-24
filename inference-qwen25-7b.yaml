@@ -1,12 +1,12 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vllm-qwen25-7b
+  name: inference-qwen25-7b
+  namespace: ai
   labels:
-    app: vllm-qwen25-7b
+    app: inference-qwen25-7b
 spec:
-  replicas: 1
-  # For GPU workloads: maxSurge=0 avoids spawning extra pod when total GPUs are limited
+  replicas: 2
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -14,17 +14,24 @@ spec:
       maxUnavailable: 1
   selector:
     matchLabels:
-      app: vllm-qwen25-7b
+      app: inference-qwen25-7b
   template:
     metadata:
       labels:
-        app: vllm-qwen25-7b
+        app: inference-qwen25-7b
     spec:
       automountServiceAccountToken: false
-      # Required for GPU access: nvidia runtime loads libcuda into the container
       runtimeClassName: nvidia
-      # Use host DNS to resolve huggingface.co (avoids cluster DNS resolution failures)
       dnsPolicy: "Default"
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: inference-qwen25-7b
+                topologyKey: kubernetes.io/hostname
       containers:
         - name: vllm
           image: vllm/vllm-openai:latest
@@ -42,8 +49,24 @@ spec:
           ports:
             - name: http
               containerPort: 8000
+          env:
+            - name: HF_HUB_ENABLE_HF_TRANSFER
+              value: "1"
           resources:
             limits:
               nvidia.com/gpu: "1"
             requests:
               nvidia.com/gpu: "1"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inference-qwen25-7b
+  namespace: ai
+spec:
+  type: ClusterIP
+  selector:
+    app: inference-qwen25-7b
+  ports:
+    - port: 8000
+      targetPort: 8000

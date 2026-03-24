@@ -5,6 +5,13 @@ curl http://192.168.86.173:31769/v1/chat/completions \
   -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "where is new york city"}], "max_tokens": 50}'3
 
 
+curl http://192.168.86.176:31769/v1/models 
+
+curl http://192.168.86.176:31769/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "where is new york city"}], "max_tokens": 50}'3
+
+
 
   sudo k3s kubectl get node gpu-node-2 -o go-template='{{index .status.allocatable "nvidia.com/gpu"}}{{"\n"}}'
 
