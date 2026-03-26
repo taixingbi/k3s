@@ -169,7 +169,7 @@ sudo k3s kubectl scale deployment inference-qwen25-7b -n ai --replicas=1
 sudo k3s kubectl scale deployment inference-qwen25-7b -n ai --replicas=2
 ```
 
-### Call the API
+### Test inference api
 
 Use a node IP where NodePort works (usually **GPU nodes**, not always the control plane):
 
