@@ -71,11 +71,6 @@ Expect **server-node-1** (control-plane) and both GPU workers **Ready**.
 
 Use `sudo k3s kubectl …` on **server-node-1**. Agents do not run the API server; `kubectl` on a worker without `KUBECONFIG=/etc/rancher/k3s/k3s.yaml` (copied from the server) fails with `localhost:8080` connection refused.
 
-## Optional
-
-- Pin k3s channel: `export INSTALL_K3S_CHANNEL=v1.34` (or similar) before `install-k3s-server.sh` / agent install via get.k3s.io
-- Scripts are idempotent when k3s is already installed and running
-
 ## GPU support (NVIDIA, e.g. RTX 3090)
 
 GPU workloads need the NVIDIA device plugin and container runtime integration on each GPU node.
@@ -116,18 +111,6 @@ Then apply the device-plugin patch (same as the install script):
 sudo k3s kubectl patch daemonset nvidia-device-plugin-daemonset -n gpu-operator \
   --type=merge \
   -p='{"spec":{"template":{"spec":{"runtimeClassName":"nvidia"}}}}'
-```
-
-### Reset GPU operator pods on one node
-
-If a node shows `nvidia.com/gpu` allocatable but workloads get `Available: 0` at admission time:
-
-```bash
-sudo k3s kubectl cordon gpu-node-2
-for pod in $(sudo k3s kubectl get pods -n gpu-operator -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.nodeName}{"\n"}{end}' | awk -v n=gpu-node-2 '$2==n {print $1}'); do
-  sudo k3s kubectl delete pod "$pod" -n gpu-operator --force --grace-period=0
-done
-sudo k3s kubectl uncordon gpu-node-2
 ```
 
 On **gpu-node-2**: `sudo systemctl restart k3s-agent` if the toolkit just updated containerd config.
