@@ -34,7 +34,10 @@ sudo ./install-k3s-server.sh
 
 When it finishes, it prints the **node token** and **join URL**. Use that token wherever this README shows `<K3S_TOKEN>`.
 
-If k3s is already running, the script prints the token from `/var/lib/rancher/k3s/server/node-token` and exits.
+If k3s is already running, the script prints the token from 
+```bash
+sudo cat /var/lib/rancher/k3s/server/node-token
+```
 
 ## Step 2: Install k3s agent on gpu-node-1 and gpu-node-2
 
