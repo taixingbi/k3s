@@ -45,7 +45,7 @@ On **each** agent host (copy `install-k3s-agent.sh` first):
 
 ```bash
 export K3S_URL=https://server-node-1.lan:6443
-export K3S_TOKEN=<K3S_TOKEN>
+export K3S_TOKEN=K10337735b3793982cb8c66cb0fc2c95bbb8e9c16f8a0b1faa25a0330e7a0bf5a70::server:ff6b7aa08942eec8fb41be7d57f0dfe5
 sudo -E ./install-k3s-agent.sh
 ```
 
@@ -53,7 +53,7 @@ If the server hostname is not resolvable:
 
 ```bash
 export K3S_URL=https://192.168.86.179:6443
-export K3S_TOKEN=<K3S_TOKEN>
+export K3S_TOKEN=K10337735b3793982cb8c66cb0fc2c95bbb8e9c16f8a0b1faa25a0330e7a0bf5a70::server:ff6b7aa08942eec8fb41be7d57f0dfe5
 sudo -E ./install-k3s-agent.sh
 ```
 
