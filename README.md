@@ -174,10 +174,21 @@ sudo k3s kubectl scale deployment inference-qwen25-7b -n ai --replicas=2
 Use a node IP where NodePort works (usually **GPU nodes**, not always the control plane):
 
 ```bash
+# GPU-node-1
 curl http://192.168.86.173:30080/v1/models
 curl http://192.168.86.173:30080/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "Hello"}], "max_tokens": 50}'
+  -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "where is jersey city"}], "max_tokens": 50}'
+
+curl http://192.168.86.176:30080/v1/models
+curl http://192.168.86.176:30080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "where is jersey city"}], "max_tokens": 50}'
+
+curl http://192.168.86.179:30080/v1/models
+curl http://192.168.86.179:30080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "where is jersey city"}], "max_tokens": 50}'
 ```
 
 Port **8000** is only inside the pod unless you use NodePort or `port-forward`:
