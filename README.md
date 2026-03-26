@@ -179,12 +179,12 @@ curl http://192.168.86.173:30080/v1/models
 curl http://192.168.86.173:30080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "where is jersey city"}], "max_tokens": 50}'
-
+# GPU-node-2
 curl http://192.168.86.176:30080/v1/models
 curl http://192.168.86.176:30080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "where is jersey city"}], "max_tokens": 50}'
-
+# Server-node-1
 curl http://192.168.86.179:30080/v1/models
 curl http://192.168.86.179:30080/v1/chat/completions \
   -H "Content-Type: application/json" \
