@@ -52,6 +52,8 @@ spec:
             - "0.7"
             - --max-model-len
             - "8192"
+            - --max-num-seqs
+            - "32"
           ports:
             - name: http
               containerPort: 8000
