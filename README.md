@@ -16,7 +16,9 @@ Scripts and manifests for **server-node-1** as the k3s control plane and **gpu-n
 | `install-k3s-agent.sh` | Join agent using `K3S_URL` + `K3S_TOKEN` |
 | `install-nvidia-gpu-operator.sh` | Helm install GPU Operator (k3s containerd paths + device-plugin `runtimeClassName` patch) |
 | `gpu-vectoradd-sample.yaml` | One-off pod: `nvidia-smi` to validate GPU scheduling |
-| `inference-qwen25-7b.yaml` | Namespace `ai`, vLLM Qwen2.5-7B (2 replicas), Service NodePort **30080** |
+| `inference-qwen25-7b.yaml` | Namespace `ai`, vLLM Qwen2.5-7B (2 replicas), ClusterIP **`vllm-inference:8000`**, NodePort **30080** |
+| `prometheus-grafana.yaml` | Namespace `monitoring`: Prometheus scrapes vLLM + DCGM, **remote_write** to Grafana Cloud (no in-cluster Grafana) |
+| `prometheus-grafana-cloud-secret.example.yaml` | Template for Secret `api-key` (copy to `*.local.yaml`, gitignored) |
 | `tmp.md` | Local scratch notes (not part of install docs) |
 
 ## Prerequisites
@@ -131,9 +133,87 @@ sudo k3s kubectl logs cuda-vectoradd
 sudo k3s kubectl delete pod cuda-vectoradd
 ```
 
+## Observability: Prometheus in k3s + Grafana Cloud (`prometheus-grafana.yaml`)
+
+**Grafana** is **Grafana Cloud** only (dashboards / Explore in the browser). **Prometheus** runs in the cluster, scrapes workloads, and **remote_writes** to Grafana Cloud hosted Prometheus—same idea as [layer-observability-grafana](https://github.com/taixingbi/layer-observability-grafana) without a local Grafana container.
+
+- **vLLM**: **Prometheus** → Endpoints for **`vllm-inference`** (`ai`, port **8000**, `/metrics`) → each vLLM pod.
+- **GPU (DCGM)**: **Prometheus** → Endpoints for the DCGM exporter **Service** in **`gpu-operator`** (name matches `*dcgm-exporter`, port **9400**, `/metrics`) → one target per GPU node (DaemonSet). Requires [NVIDIA GPU Operator](#install-nvidia-gpu-operator) with DCGM exporter (enabled by default in current chart values).
+
+**Prometheus TSDB** is stored on PVC **`prometheus-data`** (`local-path`, **20Gi** on k3s). The Prometheus Deployment uses **`strategy: Recreate`** so only one pod mounts the **ReadWriteOnce** volume during upgrades (default RollingUpdate can leave a second pod in `CrashLoopBackOff`). If your cluster uses another `StorageClass`, edit the PVC in `prometheus-grafana.yaml` before apply. Migrating from an older manifest that used `emptyDir` will create a new volume (past in-memory metrics are not carried over).
+
+**Grafana Cloud (hosted Prometheus)**: in-cluster Prometheus **remote_writes** to Grafana Cloud using **`remote_write`** in `prometheus-config` (push URL + instance **user** id in the ConfigMap, **API token** in Secret **`prometheus-grafana-cloud-remote-write`**, key **`api-key`**). Same idea as [layer-observability-grafana](https://github.com/taixingbi/layer-observability-grafana) Docker Compose + `.env`. In **Grafana Cloud → Explore**, use your hosted Prometheus datasource (e.g. `grafanacloud-*-prom`); allow a short delay after fixing the token before series appear.
+
+1. **Put a real token in the Secret** (Grafana Cloud access policy with **`metrics:write`**). Do **not** commit real `glc_` tokens to git. If a token was ever pasted into chat, email, or a repo, **revoke it** in Grafana Cloud and create a new one.
+
+   ```bash
+   # From server-node-1 (example: token in env var — avoid putting it in shell history on shared machines)
+   read -s GRAFANA_CLOUD_API_KEY && echo
+   sudo k3s kubectl create secret generic prometheus-grafana-cloud-remote-write -n monitoring \
+     --from-literal=api-key="$GRAFANA_CLOUD_API_KEY" \
+     --dry-run=client -o yaml | sudo k3s kubectl apply -f -
+   unset GRAFANA_CLOUD_API_KEY
+   sudo k3s kubectl rollout restart deployment/prometheus -n monitoring
+   ```
+
+   Alternatively, copy **`prometheus-grafana-cloud-secret.example.yaml`** to **`prometheus-grafana-cloud-secret.local.yaml`**, edit `api-key`, apply that file, then restart Prometheus (the `.local` name is gitignored).
+
+2. **If your push URL or instance id differ**, edit the `remote_write` block in ConfigMap **`prometheus-config`** (`prometheus-grafana.yaml`), re-apply, then reload or restart Prometheus (see below).
+
+Apply on **server-node-1** (after GPU Operator and vLLM are up):
+
+```bash
+sudo k3s kubectl apply -f prometheus-grafana.yaml
+sudo k3s kubectl get pods -n monitoring -o wide
+sudo k3s kubectl get svc -n monitoring
+```
+
+If you previously applied an older manifest that included in-cluster Grafana, remove the leftover objects:
+
+```bash
+sudo k3s kubectl delete deployment grafana -n monitoring --ignore-not-found
+sudo k3s kubectl delete svc grafana -n monitoring --ignore-not-found
+sudo k3s kubectl delete secret grafana-admin -n monitoring --ignore-not-found
+sudo k3s kubectl delete configmap grafana-datasources -n monitoring --ignore-not-found
+```
+
+**Prometheus** (optional UI for debugging): the Service is **ClusterIP** only — nothing listens on **`127.0.0.1:9090`** on the host until you forward a port. In one terminal:
+
+```bash
+sudo k3s kubectl port-forward -n monitoring svc/prometheus 9090:9090
+```
+
+Then open `http://127.0.0.1:9090` or reload config (see below).
+
+**Reload Prometheus** after changing the Prometheus `ConfigMap` (`apply` the manifest or edit the config):
+
+- **With port-forward running** (same host as `curl`):
+
+```bash
+sudo k3s kubectl apply -f prometheus-grafana.yaml
+curl -X POST http://127.0.0.1:9090/-/reload
+```
+
+- **Without port-forward** (restart picks up the mounted config; brief scrape gap):
+
+```bash
+sudo k3s kubectl apply -f prometheus-grafana.yaml
+sudo k3s kubectl rollout restart deployment/prometheus -n monitoring
+```
+
+Verify DCGM targets exist:
+
+```bash
+sudo k3s kubectl get svc -n gpu-operator | grep -i dcgm
+```
+
+In Prometheus (port-forward), **Status → Targets**: job `dcgm-exporter` should be **up** per GPU node.
+
+In **Grafana Cloud**, import dashboards from the reference repo under `dashboards/` if metric names match, or build panels against your hosted Prometheus datasource.
+
 ## vLLM: Qwen2.5-7B-Instruct (`inference-qwen25-7b.yaml`)
 
-Single manifest: namespace **`ai`**, Deployment **`inference-qwen25-7b`**, **2 replicas**, rolling strategy `maxSurge: 0` / `maxUnavailable: 1` (avoids a third pod when you only have two GPUs). Service **`inference-qwen25-7b`**, **NodePort 30080** → container port 8000.
+Single manifest: namespace **`ai`**, Deployment **`inference-qwen25-7b`**, **2 replicas**, rolling strategy `maxSurge: 0` / `maxUnavailable: 1` (avoids a third pod when you only have two GPUs). Services: **`vllm-inference`** ClusterIP **8000** (in-cluster / metrics); **`inference-qwen25-7b`** NodePort **30080** → container port 8000.
 
 Pod spec: `runtimeClassName: nvidia`, `dnsPolicy: Default`, optional pod anti-affinity across hosts, readiness probe on `/health` (long initial delay for model load), `HF_HUB_ENABLE_HF_TRANSFER=1`.
 
@@ -154,7 +234,23 @@ sudo k3s kubectl scale deployment inference-qwen25-7b -n ai --replicas=2
 
 ### Test inference api
 
-Use a node IP where NodePort works (usually **GPU nodes**, not always the control plane):
+Use a node IP where NodePort works (usually **GPU nodes**, not always the control plane).
+
+**If `curl` gets “Connection refused” on every node:** confirm the Service and endpoints exist, pods are **Ready**, then decide whether it is **host firewall** vs **no backends**:
+
+```bash
+sudo k3s kubectl get svc -n ai inference-qwen25-7b -o wide
+sudo k3s kubectl get endpoints -n ai inference-qwen25-7b
+sudo k3s kubectl get pods -n ai -o wide
+```
+
+On **gpu-node-1** (SSH to that host), try loopback — if this works but curls from **server-node-1** fail, open the NodePort on the workers (e.g. Ubuntu **ufw**: `sudo ufw allow 30080/tcp comment 'k3s vLLM NodePort'` on each node, then `sudo ufw reload`):
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:30080/docs
+```
+
+Reliable from **server-node-1** without NodePort routing: use **port-forward** (see end of this section).
 
 ```bash
 # GPU-node-1

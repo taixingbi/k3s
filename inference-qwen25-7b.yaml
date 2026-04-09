@@ -65,14 +65,45 @@ spec:
               nvidia.com/gpu: "1"
             requests:
               nvidia.com/gpu: "1"
+          # Model pull/load can exceed normal probe budgets; startup gates liveness/readiness.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 120
           readinessProbe:
             httpGet:
               path: /health
-              port: 8000
-            initialDelaySeconds: 180
+              port: http
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 90
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 5
+---
+# In-cluster scrape target for Prometheus (ClusterIP). Same pods as NodePort service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-inference
+  namespace: ai
+  labels:
+    app: inference-qwen25-7b
+spec:
+  type: ClusterIP
+  selector:
+    app: inference-qwen25-7b
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
 ---
 apiVersion: v1
 kind: Service

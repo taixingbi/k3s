@@ -116,7 +116,8 @@ fi
 echo ""
 IFS=',' read -r -a gpu_nodes <<< "${GPU_NODE_NAMES}"
 for gpu_node in "${gpu_nodes[@]}"; do
-  gpu_node="$(echo "${gpu_node}" | xargs)"
+  gpu_node="${gpu_node#"${gpu_node%%[![:space:]]*}"}"
+  gpu_node="${gpu_node%"${gpu_node##*[![:space:]]}"}"
   if [[ -z "${gpu_node}" ]]; then
     continue
   fi

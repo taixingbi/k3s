@@ -1,0 +1,238 @@
+# Prometheus in cluster (no local Grafana). Use Grafana Cloud UI + hosted Prometheus
+# datasource; this Prometheus remote_writes scraped metrics to Grafana Cloud.
+# Scrapes:
+#   - vLLM: Service endpoints in namespace `ai` (vllm-inference)
+#   - GPU: DCGM exporter Service endpoints in `gpu-operator` (NVIDIA GPU Operator)
+# Stack aligns with: https://github.com/taixingbi/layer-observability-grafana
+#
+# Apply after vLLM + `vllm-inference` exist in `ai`, and GPU Operator exposes
+# DCGM Service in `gpu-operator` (port 9400, /metrics); name usually ends with `dcgm-exporter`.
+# Prometheus TSDB uses PVC `prometheus-data` (storageClassName: local-path for k3s).
+# Change storageClassName if your cluster uses a different default provisioner.
+#
+# Grafana Cloud remote_write: Secret `prometheus-grafana-cloud-remote-write` holds
+# key `api-key` (metrics:write token). Replace placeholder after apply (see README).
+# Edit ConfigMap `prometheus-config` if your push URL or instance user id differs.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus-monitoring
+rules:
+  # kubernetes_sd role:endpoints needs services + endpoints + pods (no node-wide scrape).
+  - apiGroups: [""]
+    resources: [services, endpoints, pods]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus-monitoring
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: k3s
+
+    # Grafana Cloud Prometheus (remote write). Auth: instance id + API token file.
+    remote_write:
+      - url: https://prometheus-prod-56-prod-us-east-2.grafana.net/api/prom/push
+        basic_auth:
+          username: "3067716"
+          password_file: /etc/prometheus/grafana-cloud/api-key
+        queue_config:
+          max_samples_per_send: 1000
+          batch_send_deadline: 5s
+          min_backoff: 30ms
+          max_backoff: 100ms
+
+    scrape_configs:
+      # Discover each pod behind ai/vllm-inference (avoids load-balanced /metrics).
+      - job_name: vllm-inference
+        metrics_path: /metrics
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names:
+                - ai
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: vllm-inference
+          - action: labelmap
+            regex: __meta_kubernetes_service_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: kubernetes_pod_name
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: kubernetes_node
+
+      # One target per GPU node (DaemonSet); do not scrape a single ClusterIP blindly.
+      - job_name: dcgm-exporter
+        metrics_path: /metrics
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names:
+                - gpu-operator
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            action: keep
+            regex: ^.*dcgm-exporter$
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: kubernetes_pod_name
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: kubernetes_node
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: prometheus-grafana-cloud-remote-write
+  namespace: monitoring
+type: Opaque
+stringData:
+  # Replace with a Grafana Cloud access policy token that has metrics:write (glc_...).
+  # Do not commit real tokens. If this was ever leaked, rotate the token in Grafana Cloud.
+  api-key: REPLACE_WITH_GRAFANA_CLOUD_METRICS_WRITE_TOKEN
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: monitoring
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  # RWO PVC: avoid two pods during rollout (default RollingUpdate maxSurge breaks volume attach).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      securityContext:
+        fsGroup: 65534
+        runAsNonRoot: true
+        runAsUser: 65534
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.53.3
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=15d
+            - --storage.tsdb.retention.size=8GB
+            - --web.enable-lifecycle
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          ports:
+            - name: http
+              containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus/prometheus.yml
+              subPath: prometheus.yml
+              readOnly: true
+            - name: grafana-cloud-rw
+              mountPath: /etc/prometheus/grafana-cloud
+              readOnly: true
+            - name: data
+              mountPath: /prometheus
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: grafana-cloud-rw
+          secret:
+            secretName: prometheus-grafana-cloud-remote-write
+            # Readable by prometheus (uid 65534); token only exists inside the pod.
+            defaultMode: 0440
+        - name: data
+          persistentVolumeClaim:
+            claimName: prometheus-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  type: ClusterIP
+  selector:
+    app: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090
