@@ -186,7 +186,7 @@ curl http://192.168.86.179:30080/v1/chat/completions \
   -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages":
       [{"role": "user", "content": "how you introduce new york city"}], 
       "gpu-memory-utilization": 0.7,
-      "max_tokens": 1000,
+      "max_tokens": 256,
       "max-model-len": 8192, 
       "max-num-seqs": 32
   }'
