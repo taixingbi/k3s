@@ -179,18 +179,6 @@ curl http://192.168.86.179:30080/v1/chat/completions \
       "max_tokens": 50}'
 ```
 
-```bash
-# Server-node-1
-curl http://192.168.86.179:30080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages":
-      [{"role": "user", "content": "how you introduce new york city"}], 
-      "gpu-memory-utilization": 0.7,
-      "max_tokens": 256,
-      "max-model-len": 8192, 
-      "max-num-seqs": 32
-  }'
-```
 Port **8000** is only inside the pod unless you use NodePort or `port-forward`:
 
 ```bash
