@@ -18,7 +18,6 @@ Scripts and manifests for **server-node-1** as the k3s control plane and **gpu-n
 | `gpu-vectoradd-sample.yaml` | One-off pod: `nvidia-smi` to validate GPU scheduling |
 | `inference-qwen25-7b.yaml` | Namespace `ai`, vLLM Qwen2.5-7B (2 replicas), ClusterIP **`vllm-inference:8000`**, NodePort **30080** |
 | `prometheus-grafana.yaml` | Namespace `monitoring`: Prometheus scrapes vLLM + DCGM, **remote_write** to Grafana Cloud (no in-cluster Grafana) |
-| `prometheus-grafana-cloud-secret.example.yaml` | Template for Secret `api-key` (copy to `*.local.yaml`, gitignored) |
 | `input/dashboards/*.json` | Grafana dashboard exports (inference, embedding, GPU); import in Grafana Cloud ([`input/README.md`](input/README.md)) |
 | `input/alert/prometheus-alert-rules.yaml` | Prometheus-format rules for Grafana Cloud Alerting import |
 | `tmp.md` | Local scratch notes (not part of install docs) |
@@ -160,8 +159,6 @@ In **Grafana / Explore**, narrow to LLM paths with e.g. `{workload="inference"}`
    unset GRAFANA_CLOUD_API_KEY
    sudo k3s kubectl rollout restart deployment/prometheus -n monitoring
    ```
-
-   Alternatively, copy **`prometheus-grafana-cloud-secret.example.yaml`** to **`prometheus-grafana-cloud-secret.local.yaml`**, edit `api-key`, apply that file, then restart Prometheus (the `.local` name is gitignored).
 
 2. **If your push URL or instance id differ**, edit the `remote_write` block in ConfigMap **`prometheus-config`** (`prometheus-grafana.yaml`), re-apply, then reload or restart Prometheus (see below).
 
