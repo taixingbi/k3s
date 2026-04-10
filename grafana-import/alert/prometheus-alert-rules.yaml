@@ -24,7 +24,9 @@ groups:
         annotations:
           summary: "High GPU utilization on {{ $labels.node }}"
           description: "GPU utilization is {{ $value }}% on {{ $labels.node }} (gpu={{ $labels.gpu }}). Threshold: 90%."
-          dashboard_url: "https://hoanghiep.grafana.net/d/layer-gpu-dcgm"
+          __dashboardUid__: "layer-gpu-dcgm"
+          __panelId__: "1"
+          runbook_url: "https://taixingbi.grafana.net/d/layer-gpu-dcgm"
 
       - alert: GPUMemoryUsedHigh
         expr: DCGM_FI_DEV_FB_USED{workload="gpu-telemetry"} / DCGM_FI_DEV_FB_TOTAL{workload="gpu-telemetry"} * 100 > 85
@@ -36,7 +38,9 @@ groups:
         annotations:
           summary: "High GPU memory usage on {{ $labels.node }}"
           description: "GPU memory used is {{ $value }}% of VRAM on {{ $labels.node }}."
-          dashboard_url: "https://hoanghiep.grafana.net/d/layer-gpu-dcgm"
+          __dashboardUid__: "layer-gpu-dcgm"
+          __panelId__: "2"
+          runbook_url: "https://taixingbi.grafana.net/d/layer-gpu-dcgm"
 
       - alert: GPUTemperatureCritical
         expr: DCGM_FI_DEV_GPU_TEMP{workload="gpu-telemetry"} > 85
@@ -48,7 +52,9 @@ groups:
         annotations:
           summary: "GPU overheating on {{ $labels.node }}"
           description: "GPU temperature is {{ $value }}°C on {{ $labels.node }} — check cooling."
-          dashboard_url: "https://hoanghiep.grafana.net/d/layer-gpu-dcgm"
+          __dashboardUid__: "layer-gpu-dcgm"
+          __panelId__: "3"
+          runbook_url: "https://taixingbi.grafana.net/d/layer-gpu-dcgm"
 
       - alert: GPUPowerHigh
         expr: DCGM_FI_DEV_POWER_USAGE{workload="gpu-telemetry"} > 300
@@ -60,7 +66,9 @@ groups:
         annotations:
           summary: "High GPU power draw on {{ $labels.node }}"
           description: "GPU power is {{ $value }}W on {{ $labels.node }}. Tune threshold to your GPU TDP."
-          dashboard_url: "https://hoanghiep.grafana.net/d/layer-gpu-dcgm"
+          __dashboardUid__: "layer-gpu-dcgm"
+          __panelId__: "4"
+          runbook_url: "https://taixingbi.grafana.net/d/layer-gpu-dcgm"
 
       - alert: GPUXIDErrorDetected
         expr: increase(DCGM_FI_DEV_XID_ERRORS{workload="gpu-telemetry"}[5m]) > 0
@@ -72,7 +80,9 @@ groups:
         annotations:
           summary: "GPU XID hardware error on {{ $labels.node }}"
           description: "XID errors increased on {{ $labels.node }} (gpu={{ $labels.gpu }}). Check nvidia-smi and dmesg."
-          dashboard_url: "https://hoanghiep.grafana.net/d/layer-gpu-dcgm"
+          __dashboardUid__: "layer-gpu-dcgm"
+          __panelId__: "6"
+          runbook_url: "https://taixingbi.grafana.net/d/layer-gpu-dcgm"
 
   - name: inference_alerts
     interval: 60s
@@ -87,7 +97,9 @@ groups:
         annotations:
           summary: "Inference request queue backing up on {{ $labels.node }}"
           description: "{{ $value }} requests waiting on {{ $labels.node }}."
-          dashboard_url: "https://hoanghiep.grafana.net/d/layer-vllm-inference"
+          __dashboardUid__: "layer-vllm-inference"
+          __panelId__: "2"
+          runbook_url: "https://taixingbi.grafana.net/d/layer-vllm-inference"
 
       - alert: InferenceTTFTP99High
         expr: histogram_quantile(0.99, sum(rate(vllm:time_to_first_token_seconds_bucket{workload="inference"}[5m])) by (le, node)) > 2
@@ -99,7 +111,9 @@ groups:
         annotations:
           summary: "High time-to-first-token on {{ $labels.node }}"
           description: "TTFT p99 is {{ $value }}s on {{ $labels.node }}."
-          dashboard_url: "https://hoanghiep.grafana.net/d/layer-vllm-inference"
+          __dashboardUid__: "layer-vllm-inference"
+          __panelId__: "5"
+          runbook_url: "https://taixingbi.grafana.net/d/layer-vllm-inference"
 
       - alert: InferenceE2ELatencyP99High
         expr: histogram_quantile(0.99, sum(rate(vllm:e2e_request_latency_seconds_bucket{workload="inference"}[5m])) by (le, node)) > 10
@@ -111,7 +125,9 @@ groups:
         annotations:
           summary: "High end-to-end latency on {{ $labels.node }}"
           description: "E2E p99 latency is {{ $value }}s on {{ $labels.node }}."
-          dashboard_url: "https://hoanghiep.grafana.net/d/layer-vllm-inference"
+          __dashboardUid__: "layer-vllm-inference"
+          __panelId__: "6"
+          runbook_url: "https://taixingbi.grafana.net/d/layer-vllm-inference"
 
       - alert: InferenceKVCacheHigh
         expr: vllm:gpu_cache_usage_perc{workload="inference"} * 100 > 90
@@ -123,7 +139,9 @@ groups:
         annotations:
           summary: "KV cache nearly full on {{ $labels.node }}"
           description: "KV cache usage {{ $value }}% on {{ $labels.node }}."
-          dashboard_url: "https://hoanghiep.grafana.net/d/layer-vllm-inference"
+          __dashboardUid__: "layer-vllm-inference"
+          __panelId__: "8"
+          runbook_url: "https://taixingbi.grafana.net/d/layer-vllm-inference"
 
       - alert: InferenceQueueTimeP99High
         expr: histogram_quantile(0.99, sum(rate(vllm:request_queue_time_seconds_bucket{workload="inference"}[5m])) by (le, node)) > 5
@@ -135,7 +153,9 @@ groups:
         annotations:
           summary: "Requests spending too long in queue on {{ $labels.node }}"
           description: "Queue time p99 is {{ $value }}s on {{ $labels.node }}."
-          dashboard_url: "https://hoanghiep.grafana.net/d/layer-vllm-inference"
+          __dashboardUid__: "layer-vllm-inference"
+          __panelId__: "7"
+          runbook_url: "https://taixingbi.grafana.net/d/layer-vllm-inference"
 
   - name: embedding_alerts
     interval: 60s
@@ -150,7 +170,9 @@ groups:
         annotations:
           summary: "Embedding request queue backing up on {{ $labels.node }}"
           description: "{{ $value }} embedding requests waiting on {{ $labels.node }}."
-          dashboard_url: "https://hoanghiep.grafana.net/d/layer-vllm-embedding"
+          __dashboardUid__: "layer-vllm-embedding"
+          __panelId__: "5"
+          runbook_url: "https://taixingbi.grafana.net/d/layer-vllm-embedding"
 
       - alert: EmbeddingE2ELatencyP99High
         expr: histogram_quantile(0.99, sum(rate(vllm:e2e_request_latency_seconds_bucket{workload="embedding"}[5m])) by (le, node)) > 5
@@ -162,7 +184,9 @@ groups:
         annotations:
           summary: "High embedding latency on {{ $labels.node }}"
           description: "Embedding p99 latency is {{ $value }}s on {{ $labels.node }}."
-          dashboard_url: "https://hoanghiep.grafana.net/d/layer-vllm-embedding"
+          __dashboardUid__: "layer-vllm-embedding"
+          __panelId__: "3"
+          runbook_url: "https://taixingbi.grafana.net/d/layer-vllm-embedding"
 
       - alert: EmbeddingNoTraffic
         expr: sum by (node) (rate(vllm:request_success_total{workload="embedding"}[24h])) == 0
@@ -173,5 +197,7 @@ groups:
           notification: alerts-all
         annotations:
           summary: "No embedding requests on {{ $labels.node }}"
-          description: "Success request rate is 0 on {{ $labels.node }} for 5m — service may be idle or down."
-          dashboard_url: "https://hoanghiep.grafana.net/d/layer-vllm-embedding"
+          description: "Success request rate is 0 on {{ $labels.node }} for 24h — service may be idle or down."
+          __dashboardUid__: "layer-vllm-embedding"
+          __panelId__: "1"
+          runbook_url: "https://taixingbi.grafana.net/d/layer-vllm-embedding"
