@@ -1,8 +1,9 @@
-# Prometheus in cluster (no local Grafana). Use Grafana Cloud UI + hosted Prometheus
-# datasource; this Prometheus remote_writes scraped metrics to Grafana Cloud.
-# Scrapes:
-#   - vLLM: Service endpoints in namespace `ai` (vllm-inference)
-#   - GPU: DCGM exporter Service endpoints in `gpu-operator` (NVIDIA GPU Operator)
+# Prometheus in cluster (no local Grafana). Filename prometheus-grafana.yaml is historical;
+# only Prometheus + remote_write live here. Use Grafana Cloud for dashboards.
+# Scrapes (filter in Grafana with label workload=inference|embedding|gpu-telemetry):
+#   - workload=inference: vLLM chat/completions via Service vllm-inference (ai)
+#   - workload=gpu-telemetry: DCGM per-GPU metrics (gpu-operator)
+#   - workload=embedding: vLLM embed on node LAN :8001 (static targets; pod→host routing)
 # Stack aligns with: https://github.com/taixingbi/layer-observability-grafana
 #
 # Apply after vLLM + `vllm-inference` exist in `ai`, and GPU Operator exposes
@@ -74,7 +75,7 @@ data:
           max_backoff: 100ms
 
     scrape_configs:
-      # Discover each pod behind ai/vllm-inference (avoids load-balanced /metrics).
+      # vLLM inference (chat / completions): one target per pod behind Service vllm-inference.
       - job_name: vllm-inference
         metrics_path: /metrics
         kubernetes_sd_configs:
@@ -94,8 +95,10 @@ data:
             target_label: kubernetes_pod_name
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: kubernetes_node
+          - target_label: workload
+            replacement: inference
 
-      # One target per GPU node (DaemonSet); do not scrape a single ClusterIP blindly.
+      # GPU hardware metrics (not vLLM): DCGM DaemonSet, one target per node.
       - job_name: dcgm-exporter
         metrics_path: /metrics
         kubernetes_sd_configs:
@@ -113,6 +116,29 @@ data:
             target_label: kubernetes_pod_name
           - source_labels: [__meta_kubernetes_pod_node_name]
             target_label: kubernetes_node
+          - target_label: workload
+            replacement: gpu-telemetry
+
+      # vLLM embedding (BGE etc.): host:port on GPU nodes; aligns with layer-observability static jobs.
+      - job_name: vllm-embedding-gpu-node-1
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["192.168.86.173:8001"]
+            labels:
+              node: gpu-node-1
+              workload: embedding
+              service: embedding
+              model: BAAI/bge-m3
+
+      - job_name: vllm-embedding-gpu-node-2
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["192.168.86.176:8001"]
+            labels:
+              node: gpu-node-2
+              workload: embedding
+              service: embedding
+              model: BAAI/bge-m3
 ---
 apiVersion: v1
 kind: Secret

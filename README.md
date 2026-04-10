@@ -19,6 +19,8 @@ Scripts and manifests for **server-node-1** as the k3s control plane and **gpu-n
 | `inference-qwen25-7b.yaml` | Namespace `ai`, vLLM Qwen2.5-7B (2 replicas), ClusterIP **`vllm-inference:8000`**, NodePort **30080** |
 | `prometheus-grafana.yaml` | Namespace `monitoring`: Prometheus scrapes vLLM + DCGM, **remote_write** to Grafana Cloud (no in-cluster Grafana) |
 | `prometheus-grafana-cloud-secret.example.yaml` | Template for Secret `api-key` (copy to `*.local.yaml`, gitignored) |
+| `input/dashboards/*.json` | Grafana dashboard exports (inference, embedding, GPU); import in Grafana Cloud ([`input/README.md`](input/README.md)) |
+| `input/alert/prometheus-alert-rules.yaml` | Prometheus-format rules for Grafana Cloud Alerting import |
 | `tmp.md` | Local scratch notes (not part of install docs) |
 
 ## Prerequisites
@@ -137,8 +139,11 @@ sudo k3s kubectl delete pod cuda-vectoradd
 
 **Grafana** is **Grafana Cloud** only (dashboards / Explore in the browser). **Prometheus** runs in the cluster, scrapes workloads, and **remote_writes** to Grafana Cloud hosted Prometheus—same idea as [layer-observability-grafana](https://github.com/taixingbi/layer-observability-grafana) without a local Grafana container.
 
-- **vLLM**: **Prometheus** → Endpoints for **`vllm-inference`** (`ai`, port **8000**, `/metrics`) → each vLLM pod.
-- **GPU (DCGM)**: **Prometheus** → Endpoints for the DCGM exporter **Service** in **`gpu-operator`** (name matches `*dcgm-exporter`, port **9400**, `/metrics`) → one target per GPU node (DaemonSet). Requires [NVIDIA GPU Operator](#install-nvidia-gpu-operator) with DCGM exporter (enabled by default in current chart values).
+- **Inference (vLLM chat)**: job **`vllm-inference`**, label **`workload=inference`** → Endpoints for **`vllm-inference`** (`ai`, **8000**, `/metrics`) per pod.
+- **GPU telemetry (DCGM)**: job **`dcgm-exporter`**, label **`workload=gpu-telemetry`** → DCGM Service in **`gpu-operator`** (`*dcgm-exporter`, **9400**). Requires [NVIDIA GPU Operator](#install-nvidia-gpu-operator).
+- **Embedding (optional)**: jobs **`vllm-embedding-gpu-node-1|2`**, labels **`workload=embedding`**, **`service=embedding`**, **`model=BAAI/bge-m3`** → static **`192.168.86.173:8001`** / **`.176:8001`**. Requires embed vLLM on those hosts and pod→node IP reachability; edit `prometheus-config` if your LAN differs.
+
+In **Grafana / Explore**, narrow to LLM paths with e.g. `{workload="inference"}`, `{workload="embedding"}`, or hardware with `{workload="gpu-telemetry"}`.
 
 **Prometheus TSDB** is stored on PVC **`prometheus-data`** (`local-path`, **20Gi** on k3s). The Prometheus Deployment uses **`strategy: Recreate`** so only one pod mounts the **ReadWriteOnce** volume during upgrades (default RollingUpdate can leave a second pod in `CrashLoopBackOff`). If your cluster uses another `StorageClass`, edit the PVC in `prometheus-grafana.yaml` before apply. Migrating from an older manifest that used `emptyDir` will create a new volume (past in-memory metrics are not carried over).
 
@@ -209,7 +214,7 @@ sudo k3s kubectl get svc -n gpu-operator | grep -i dcgm
 
 In Prometheus (port-forward), **Status → Targets**: job `dcgm-exporter` should be **up** per GPU node.
 
-In **Grafana Cloud**, import dashboards from the reference repo under `dashboards/` if metric names match, or build panels against your hosted Prometheus datasource.
+In **Grafana Cloud**, import **`input/dashboards/*.json`** and alert rules from **`input/alert/prometheus-alert-rules.yaml`** (see [`input/README.md`](input/README.md)); originals live in [layer-observability-grafana](https://github.com/taixingbi/layer-observability-grafana).
 
 ## vLLM: Qwen2.5-7B-Instruct (`inference-qwen25-7b.yaml`)
 

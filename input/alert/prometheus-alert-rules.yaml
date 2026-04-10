@@ -1,0 +1,146 @@
+# Prometheus-format alerting rules for Grafana Cloud.
+#
+# Import: Alerting → Alert rules → Import → "Prometheus YAML file" (not Grafana provisioning YAML).
+# Pick your hosted Prometheus/Mimir datasource as the target. Choose folder "Layer Observability" or as needed.
+#
+# Same logic as the previous grafana-alert-rules.yaml (thresholds in expr + for).
+
+groups:
+  - name: gpu_alerts
+    interval: 60s
+    rules:
+      - alert: GPUUtilizationHigh
+        expr: DCGM_FI_DEV_GPU_UTIL{service="gpu"} > 90
+        for: 5m
+        labels:
+          severity: warning
+          service: gpu
+        annotations:
+          summary: "High GPU utilization on {{ $labels.node }}"
+          description: "GPU utilization is {{ $value }}% on {{ $labels.node }} (gpu={{ $labels.gpu }}). Threshold: 90%."
+
+      - alert: GPUMemoryUsedHigh
+        expr: DCGM_FI_DEV_FB_USED{service="gpu"} / DCGM_FI_DEV_FB_TOTAL{service="gpu"} * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          service: gpu
+        annotations:
+          summary: "High GPU memory usage on {{ $labels.node }}"
+          description: "GPU memory used is {{ $value }}% of VRAM on {{ $labels.node }}."
+
+      - alert: GPUTemperatureCritical
+        expr: DCGM_FI_DEV_GPU_TEMP{service="gpu"} > 85
+        for: 5m
+        labels:
+          severity: critical
+          service: gpu
+        annotations:
+          summary: "GPU overheating on {{ $labels.node }}"
+          description: "GPU temperature is {{ $value }}°C on {{ $labels.node }} — check cooling."
+
+      - alert: GPUPowerHigh
+        expr: DCGM_FI_DEV_POWER_USAGE{service="gpu"} > 300
+        for: 5m
+        labels:
+          severity: warning
+          service: gpu
+        annotations:
+          summary: "High GPU power draw on {{ $labels.node }}"
+          description: "GPU power is {{ $value }}W on {{ $labels.node }}. Tune threshold to your GPU TDP."
+
+      - alert: GPUXIDErrorDetected
+        expr: increase(DCGM_FI_DEV_XID_ERRORS{service="gpu"}[5m]) > 0
+        for: 0s
+        labels:
+          severity: critical
+          service: gpu
+        annotations:
+          summary: "GPU XID hardware error on {{ $labels.node }}"
+          description: "XID errors increased on {{ $labels.node }} (gpu={{ $labels.gpu }}). Check nvidia-smi and dmesg."
+
+  - name: inference_alerts
+    interval: 60s
+    rules:
+      - alert: InferenceWaitingQueueHigh
+        expr: vllm:num_requests_waiting{service="inference"} > 20
+        for: 2m
+        labels:
+          severity: warning
+          service: inference
+        annotations:
+          summary: "Inference request queue backing up on {{ $labels.node }}"
+          description: "{{ $value }} requests waiting on {{ $labels.node }}."
+
+      - alert: InferenceTTFTP99High
+        expr: histogram_quantile(0.99, sum(rate(vllm:time_to_first_token_seconds_bucket{service="inference"}[5m])) by (le, node)) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: inference
+        annotations:
+          summary: "High time-to-first-token on {{ $labels.node }}"
+          description: "TTFT p99 is {{ $value }}s on {{ $labels.node }}."
+
+      - alert: InferenceE2ELatencyP99High
+        expr: histogram_quantile(0.99, sum(rate(vllm:e2e_request_latency_seconds_bucket{service="inference"}[5m])) by (le, node)) > 10
+        for: 5m
+        labels:
+          severity: critical
+          service: inference
+        annotations:
+          summary: "High end-to-end latency on {{ $labels.node }}"
+          description: "E2E p99 latency is {{ $value }}s on {{ $labels.node }}."
+
+      - alert: InferenceKVCacheHigh
+        expr: vllm:gpu_cache_usage_perc{service="inference"} * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          service: inference
+        annotations:
+          summary: "KV cache nearly full on {{ $labels.node }}"
+          description: "KV cache usage {{ $value }}% on {{ $labels.node }}."
+
+      - alert: InferenceQueueTimeP99High
+        expr: histogram_quantile(0.99, sum(rate(vllm:request_queue_time_seconds_bucket{service="inference"}[5m])) by (le, node)) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: inference
+        annotations:
+          summary: "Requests spending too long in queue on {{ $labels.node }}"
+          description: "Queue time p99 is {{ $value }}s on {{ $labels.node }}."
+
+  - name: embedding_alerts
+    interval: 60s
+    rules:
+      - alert: EmbeddingWaitingQueueHigh
+        expr: vllm:num_requests_waiting{service="embedding"} > 50
+        for: 5m
+        labels:
+          severity: warning
+          service: embedding
+        annotations:
+          summary: "Embedding request queue backing up on {{ $labels.node }}"
+          description: "{{ $value }} embedding requests waiting on {{ $labels.node }}."
+
+      - alert: EmbeddingE2ELatencyP99High
+        expr: histogram_quantile(0.99, sum(rate(vllm:e2e_request_latency_seconds_bucket{service="embedding"}[5m])) by (le, node)) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: embedding
+        annotations:
+          summary: "High embedding latency on {{ $labels.node }}"
+          description: "Embedding p99 latency is {{ $value }}s on {{ $labels.node }}."
+
+      - alert: EmbeddingNoTraffic
+        expr: sum by (node) (rate(vllm:request_success_total{service="embedding"}[5m])) == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: embedding
+        annotations:
+          summary: "No embedding requests on {{ $labels.node }}"
+          description: "Success request rate is 0 on {{ $labels.node }} for 5m — service may be idle or down."
