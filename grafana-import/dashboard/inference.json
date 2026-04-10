@@ -31,7 +31,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "vllm:num_requests_running{service=\"inference\"}",
+          "expr": "vllm:num_requests_running{workload=\"inference\"}",
           "legendFormat": "{{node}}",
           "refId": "A"
         }
@@ -53,7 +53,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "vllm:num_requests_waiting{service=\"inference\"}",
+          "expr": "vllm:num_requests_waiting{workload=\"inference\"}",
           "legendFormat": "{{node}}",
           "refId": "A"
         }
@@ -76,7 +76,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(vllm:prompt_tokens_total{service=\"inference\"}[1m])",
+          "expr": "rate(vllm:prompt_tokens_total{workload=\"inference\"}[1m])",
           "legendFormat": "{{node}} prompt tok/s",
           "refId": "A"
         }
@@ -99,7 +99,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "rate(vllm:generation_tokens_total{service=\"inference\"}[1m])",
+          "expr": "rate(vllm:generation_tokens_total{workload=\"inference\"}[1m])",
           "legendFormat": "{{node}} gen tok/s",
           "refId": "A"
         }
@@ -122,7 +122,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.99, sum(rate(vllm:time_to_first_token_seconds_bucket{service=\"inference\"}[5m])) by (le, node))",
+          "expr": "histogram_quantile(0.99, sum(rate(vllm:time_to_first_token_seconds_bucket{workload=\"inference\"}[5m])) by (le, node))",
           "legendFormat": "{{node}} p99 TTFT",
           "refId": "A"
         }
@@ -145,7 +145,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.99, sum(rate(vllm:e2e_request_latency_seconds_bucket{service=\"inference\"}[5m])) by (le, node))",
+          "expr": "histogram_quantile(0.99, sum(rate(vllm:e2e_request_latency_seconds_bucket{workload=\"inference\"}[5m])) by (le, node))",
           "legendFormat": "{{node}} p99 e2e",
           "refId": "A"
         }
@@ -168,7 +168,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "histogram_quantile(0.99, sum(rate(vllm:request_queue_time_seconds_bucket{service=\"inference\"}[5m])) by (le, node))",
+          "expr": "histogram_quantile(0.99, sum(rate(vllm:request_queue_time_seconds_bucket{workload=\"inference\"}[5m])) by (le, node))",
           "legendFormat": "{{node}} p99 queue",
           "refId": "A"
         }
@@ -193,7 +193,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "vllm:gpu_cache_usage_perc{service=\"inference\"}",
+          "expr": "vllm:gpu_cache_usage_perc{workload=\"inference\"}",
           "legendFormat": "{{node}} KV GPU cache",
           "refId": "A"
         }

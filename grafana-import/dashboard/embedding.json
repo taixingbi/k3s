@@ -22,17 +22,8 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineInterpolation": "smooth",
-            "showPoints": "never"
-          },
-          "unit": "percent",
-          "min": 0,
-          "max": 100
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "smooth", "showPoints": "never" },
+          "unit": "reqps"
         }
       },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
@@ -41,12 +32,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "DCGM_FI_DEV_GPU_UTIL{service=\"gpu\"}",
-          "legendFormat": "{{node}} GPU {{gpu}}",
+          "expr": "rate(vllm:request_success_total{workload=\"embedding\"}[1m])",
+          "legendFormat": "{{node}}",
           "refId": "A"
         }
       ],
-      "title": "GPU utilization",
+      "title": "Request rate (success)",
       "type": "timeseries"
     },
     {
@@ -54,13 +45,8 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineInterpolation": "smooth",
-            "showPoints": "never"
-          },
-          "unit": "decmbytes"
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "smooth", "showPoints": "never" },
+          "unit": "tps"
         }
       },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
@@ -69,12 +55,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "DCGM_FI_DEV_FB_USED{service=\"gpu\"}",
-          "legendFormat": "{{node}} GPU {{gpu}}",
+          "expr": "rate(vllm:prompt_tokens_total{workload=\"embedding\"}[1m])",
+          "legendFormat": "{{node}} input tok/s",
           "refId": "A"
         }
       ],
-      "title": "GPU memory used",
+      "title": "Input token throughput",
       "type": "timeseries"
     },
     {
@@ -83,7 +69,7 @@
         "defaults": {
           "color": { "mode": "palette-classic" },
           "custom": { "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "smooth", "showPoints": "never" },
-          "unit": "celsius"
+          "unit": "s"
         }
       },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
@@ -92,12 +78,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "DCGM_FI_DEV_GPU_TEMP{service=\"gpu\"}",
-          "legendFormat": "{{node}} GPU {{gpu}}",
+          "expr": "histogram_quantile(0.99, sum(rate(vllm:e2e_request_latency_seconds_bucket{workload=\"embedding\"}[5m])) by (le, node))",
+          "legendFormat": "{{node}} p99",
           "refId": "A"
         }
       ],
-      "title": "GPU temperature",
+      "title": "Request latency (p99 e2e)",
       "type": "timeseries"
     },
     {
@@ -105,22 +91,21 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
-          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "smooth", "showPoints": "never" },
-          "unit": "watt"
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "smooth", "showPoints": "never" }
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "gridPos": { "h": 8, "w": 8, "x": 12, "y": 8 },
       "id": 4,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "DCGM_FI_DEV_POWER_USAGE{service=\"gpu\"}",
-          "legendFormat": "{{node}} GPU {{gpu}}",
+          "expr": "vllm:num_requests_running{workload=\"embedding\"}",
+          "legendFormat": "{{node}}",
           "refId": "A"
         }
       ],
-      "title": "GPU power",
+      "title": "Running requests",
       "type": "timeseries"
     },
     {
@@ -128,55 +113,32 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
-          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "smooth", "showPoints": "never" },
-          "unit": "hertz"
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "smooth", "showPoints": "never" }
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "gridPos": { "h": 8, "w": 8, "x": 20, "y": 8 },
       "id": 5,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "DCGM_FI_DEV_SM_CLOCK{service=\"gpu\"}",
-          "legendFormat": "{{node}} GPU {{gpu}}",
+          "expr": "vllm:num_requests_waiting{workload=\"embedding\"}",
+          "legendFormat": "{{node}}",
           "refId": "A"
         }
       ],
-      "title": "SM clock",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineInterpolation": "smooth", "showPoints": "auto" }
-        }
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
-      "id": 6,
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-          "expr": "DCGM_FI_DEV_XID_ERRORS{service=\"gpu\"}",
-          "legendFormat": "{{node}} GPU {{gpu}}",
-          "refId": "A"
-        }
-      ],
-      "title": "XID errors",
+      "title": "Waiting requests",
       "type": "timeseries"
     }
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["dcgm", "gpu"],
+  "tags": ["vllm", "embedding", "bge-m3"],
   "templating": { "list": [] },
   "time": { "from": "now-6h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "GPU (DCGM)",
-  "uid": "layer-gpu-dcgm",
+  "title": "vLLM embedding (bge-m3)",
+  "uid": "layer-vllm-embedding",
   "version": 1
 }

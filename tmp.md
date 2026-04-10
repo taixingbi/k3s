@@ -1,19 +1,22 @@
-curl http://192.168.86.173:31769/v1/models 
+curl http://192.168.86.173:30080/v1/models 
 
-curl http://192.168.86.173:31769/v1/chat/completions \
+curl http://192.168.86.173:30080/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "where is new york city"}], "max_tokens": 50}'3
+  -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "where is new york city"}], "max_tokens": 50}'
 
 
-curl http://192.168.86.176:31769/v1/models 
+curl http://192.168.86.176:30080/v1/models 
 
-curl http://192.168.86.176:31769/v1/chat/completions \
+curl http://192.168.86.176:30080/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "where is new york city"}], "max_tokens": 50}'3
+  -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "where is new york city"}], "max_tokens": 50}'
 
 
 
   sudo k3s kubectl get node gpu-node-2 -o go-template='{{index .status.allocatable "nvidia.com/gpu"}}{{"\n"}}'
+
+
+curl http://192.168.86.179:8000/v1/models 
 
 
 

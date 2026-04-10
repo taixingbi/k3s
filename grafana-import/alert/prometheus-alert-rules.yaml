@@ -4,13 +4,18 @@
 # Pick your hosted Prometheus/Mimir datasource as the target. Choose folder "Layer Observability" or as needed.
 #
 # Same logic as the previous grafana-alert-rules.yaml (thresholds in expr + for).
+#
+# Update the base URL below to your Grafana Cloud stack URL:
+# - GPU dashboard UID: layer-gpu-dcgm
+# - Inference dashboard UID: layer-vllm-inference
+# - Embedding dashboard UID: layer-vllm-embedding
 
 groups:
   - name: gpu_alerts
     interval: 60s
     rules:
       - alert: GPUUtilizationHigh
-        expr: DCGM_FI_DEV_GPU_UTIL{service="gpu"} > 90
+        expr: DCGM_FI_DEV_GPU_UTIL{workload="gpu-telemetry"} > 90
         for: 5m
         labels:
           severity: warning
@@ -18,9 +23,10 @@ groups:
         annotations:
           summary: "High GPU utilization on {{ $labels.node }}"
           description: "GPU utilization is {{ $value }}% on {{ $labels.node }} (gpu={{ $labels.gpu }}). Threshold: 90%."
+          dashboard_url: "https://hoanghiep.grafana.net/d/layer-gpu-dcgm"
 
       - alert: GPUMemoryUsedHigh
-        expr: DCGM_FI_DEV_FB_USED{service="gpu"} / DCGM_FI_DEV_FB_TOTAL{service="gpu"} * 100 > 85
+        expr: DCGM_FI_DEV_FB_USED{workload="gpu-telemetry"} / DCGM_FI_DEV_FB_TOTAL{workload="gpu-telemetry"} * 100 > 85
         for: 5m
         labels:
           severity: warning
@@ -28,9 +34,10 @@ groups:
         annotations:
           summary: "High GPU memory usage on {{ $labels.node }}"
           description: "GPU memory used is {{ $value }}% of VRAM on {{ $labels.node }}."
+          dashboard_url: "https://hoanghiep.grafana.net/d/layer-gpu-dcgm"
 
       - alert: GPUTemperatureCritical
-        expr: DCGM_FI_DEV_GPU_TEMP{service="gpu"} > 85
+        expr: DCGM_FI_DEV_GPU_TEMP{workload="gpu-telemetry"} > 85
         for: 5m
         labels:
           severity: critical
@@ -38,9 +45,10 @@ groups:
         annotations:
           summary: "GPU overheating on {{ $labels.node }}"
           description: "GPU temperature is {{ $value }}°C on {{ $labels.node }} — check cooling."
+          dashboard_url: "https://hoanghiep.grafana.net/d/layer-gpu-dcgm"
 
       - alert: GPUPowerHigh
-        expr: DCGM_FI_DEV_POWER_USAGE{service="gpu"} > 300
+        expr: DCGM_FI_DEV_POWER_USAGE{workload="gpu-telemetry"} > 300
         for: 5m
         labels:
           severity: warning
@@ -48,9 +56,10 @@ groups:
         annotations:
           summary: "High GPU power draw on {{ $labels.node }}"
           description: "GPU power is {{ $value }}W on {{ $labels.node }}. Tune threshold to your GPU TDP."
+          dashboard_url: "https://hoanghiep.grafana.net/d/layer-gpu-dcgm"
 
       - alert: GPUXIDErrorDetected
-        expr: increase(DCGM_FI_DEV_XID_ERRORS{service="gpu"}[5m]) > 0
+        expr: increase(DCGM_FI_DEV_XID_ERRORS{workload="gpu-telemetry"}[5m]) > 0
         for: 0s
         labels:
           severity: critical
@@ -58,12 +67,13 @@ groups:
         annotations:
           summary: "GPU XID hardware error on {{ $labels.node }}"
           description: "XID errors increased on {{ $labels.node }} (gpu={{ $labels.gpu }}). Check nvidia-smi and dmesg."
+          dashboard_url: "https://hoanghiep.grafana.net/d/layer-gpu-dcgm"
 
   - name: inference_alerts
     interval: 60s
     rules:
       - alert: InferenceWaitingQueueHigh
-        expr: vllm:num_requests_waiting{service="inference"} > 20
+        expr: vllm:num_requests_waiting{workload="inference"} > 20
         for: 2m
         labels:
           severity: warning
@@ -71,9 +81,10 @@ groups:
         annotations:
           summary: "Inference request queue backing up on {{ $labels.node }}"
           description: "{{ $value }} requests waiting on {{ $labels.node }}."
+          dashboard_url: "https://hoanghiep.grafana.net/d/layer-vllm-inference"
 
       - alert: InferenceTTFTP99High
-        expr: histogram_quantile(0.99, sum(rate(vllm:time_to_first_token_seconds_bucket{service="inference"}[5m])) by (le, node)) > 2
+        expr: histogram_quantile(0.99, sum(rate(vllm:time_to_first_token_seconds_bucket{workload="inference"}[5m])) by (le, node)) > 2
         for: 5m
         labels:
           severity: warning
@@ -81,9 +92,10 @@ groups:
         annotations:
           summary: "High time-to-first-token on {{ $labels.node }}"
           description: "TTFT p99 is {{ $value }}s on {{ $labels.node }}."
+          dashboard_url: "https://hoanghiep.grafana.net/d/layer-vllm-inference"
 
       - alert: InferenceE2ELatencyP99High
-        expr: histogram_quantile(0.99, sum(rate(vllm:e2e_request_latency_seconds_bucket{service="inference"}[5m])) by (le, node)) > 10
+        expr: histogram_quantile(0.99, sum(rate(vllm:e2e_request_latency_seconds_bucket{workload="inference"}[5m])) by (le, node)) > 10
         for: 5m
         labels:
           severity: critical
@@ -91,9 +103,10 @@ groups:
         annotations:
           summary: "High end-to-end latency on {{ $labels.node }}"
           description: "E2E p99 latency is {{ $value }}s on {{ $labels.node }}."
+          dashboard_url: "https://hoanghiep.grafana.net/d/layer-vllm-inference"
 
       - alert: InferenceKVCacheHigh
-        expr: vllm:gpu_cache_usage_perc{service="inference"} * 100 > 90
+        expr: vllm:gpu_cache_usage_perc{workload="inference"} * 100 > 90
         for: 5m
         labels:
           severity: warning
@@ -101,9 +114,10 @@ groups:
         annotations:
           summary: "KV cache nearly full on {{ $labels.node }}"
           description: "KV cache usage {{ $value }}% on {{ $labels.node }}."
+          dashboard_url: "https://hoanghiep.grafana.net/d/layer-vllm-inference"
 
       - alert: InferenceQueueTimeP99High
-        expr: histogram_quantile(0.99, sum(rate(vllm:request_queue_time_seconds_bucket{service="inference"}[5m])) by (le, node)) > 5
+        expr: histogram_quantile(0.99, sum(rate(vllm:request_queue_time_seconds_bucket{workload="inference"}[5m])) by (le, node)) > 5
         for: 5m
         labels:
           severity: warning
@@ -111,12 +125,13 @@ groups:
         annotations:
           summary: "Requests spending too long in queue on {{ $labels.node }}"
           description: "Queue time p99 is {{ $value }}s on {{ $labels.node }}."
+          dashboard_url: "https://hoanghiep.grafana.net/d/layer-vllm-inference"
 
   - name: embedding_alerts
     interval: 60s
     rules:
       - alert: EmbeddingWaitingQueueHigh
-        expr: vllm:num_requests_waiting{service="embedding"} > 50
+        expr: vllm:num_requests_waiting{workload="embedding"} > 50
         for: 5m
         labels:
           severity: warning
@@ -124,9 +139,10 @@ groups:
         annotations:
           summary: "Embedding request queue backing up on {{ $labels.node }}"
           description: "{{ $value }} embedding requests waiting on {{ $labels.node }}."
+          dashboard_url: "https://hoanghiep.grafana.net/d/layer-vllm-embedding"
 
       - alert: EmbeddingE2ELatencyP99High
-        expr: histogram_quantile(0.99, sum(rate(vllm:e2e_request_latency_seconds_bucket{service="embedding"}[5m])) by (le, node)) > 5
+        expr: histogram_quantile(0.99, sum(rate(vllm:e2e_request_latency_seconds_bucket{workload="embedding"}[5m])) by (le, node)) > 5
         for: 5m
         labels:
           severity: warning
@@ -134,9 +150,10 @@ groups:
         annotations:
           summary: "High embedding latency on {{ $labels.node }}"
           description: "Embedding p99 latency is {{ $value }}s on {{ $labels.node }}."
+          dashboard_url: "https://hoanghiep.grafana.net/d/layer-vllm-embedding"
 
       - alert: EmbeddingNoTraffic
-        expr: sum by (node) (rate(vllm:request_success_total{service="embedding"}[5m])) == 0
+        expr: sum by (node) (rate(vllm:request_success_total{workload="embedding"}[5m])) == 0
         for: 5m
         labels:
           severity: warning
@@ -144,3 +161,4 @@ groups:
         annotations:
           summary: "No embedding requests on {{ $labels.node }}"
           description: "Success request rate is 0 on {{ $labels.node }} for 5m — service may be idle or down."
+          dashboard_url: "https://hoanghiep.grafana.net/d/layer-vllm-embedding"
