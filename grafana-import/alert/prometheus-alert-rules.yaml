@@ -20,6 +20,7 @@ groups:
         labels:
           severity: warning
           service: gpu
+          notification: alerts-all
         annotations:
           summary: "High GPU utilization on {{ $labels.node }}"
           description: "GPU utilization is {{ $value }}% on {{ $labels.node }} (gpu={{ $labels.gpu }}). Threshold: 90%."
@@ -31,6 +32,7 @@ groups:
         labels:
           severity: warning
           service: gpu
+          notification: alerts-all
         annotations:
           summary: "High GPU memory usage on {{ $labels.node }}"
           description: "GPU memory used is {{ $value }}% of VRAM on {{ $labels.node }}."
@@ -42,6 +44,7 @@ groups:
         labels:
           severity: critical
           service: gpu
+          notification: alerts-all
         annotations:
           summary: "GPU overheating on {{ $labels.node }}"
           description: "GPU temperature is {{ $value }}°C on {{ $labels.node }} — check cooling."
@@ -53,6 +56,7 @@ groups:
         labels:
           severity: warning
           service: gpu
+          notification: alerts-all
         annotations:
           summary: "High GPU power draw on {{ $labels.node }}"
           description: "GPU power is {{ $value }}W on {{ $labels.node }}. Tune threshold to your GPU TDP."
@@ -64,6 +68,7 @@ groups:
         labels:
           severity: critical
           service: gpu
+          notification: alerts-all
         annotations:
           summary: "GPU XID hardware error on {{ $labels.node }}"
           description: "XID errors increased on {{ $labels.node }} (gpu={{ $labels.gpu }}). Check nvidia-smi and dmesg."
@@ -78,6 +83,7 @@ groups:
         labels:
           severity: warning
           service: inference
+          notification: alerts-all
         annotations:
           summary: "Inference request queue backing up on {{ $labels.node }}"
           description: "{{ $value }} requests waiting on {{ $labels.node }}."
@@ -89,6 +95,7 @@ groups:
         labels:
           severity: warning
           service: inference
+          notification: alerts-all
         annotations:
           summary: "High time-to-first-token on {{ $labels.node }}"
           description: "TTFT p99 is {{ $value }}s on {{ $labels.node }}."
@@ -100,6 +107,7 @@ groups:
         labels:
           severity: critical
           service: inference
+          notification: alerts-all
         annotations:
           summary: "High end-to-end latency on {{ $labels.node }}"
           description: "E2E p99 latency is {{ $value }}s on {{ $labels.node }}."
@@ -111,6 +119,7 @@ groups:
         labels:
           severity: warning
           service: inference
+          notification: alerts-all
         annotations:
           summary: "KV cache nearly full on {{ $labels.node }}"
           description: "KV cache usage {{ $value }}% on {{ $labels.node }}."
@@ -122,6 +131,7 @@ groups:
         labels:
           severity: warning
           service: inference
+          notification: alerts-all
         annotations:
           summary: "Requests spending too long in queue on {{ $labels.node }}"
           description: "Queue time p99 is {{ $value }}s on {{ $labels.node }}."
@@ -136,6 +146,7 @@ groups:
         labels:
           severity: warning
           service: embedding
+          notification: alerts-all
         annotations:
           summary: "Embedding request queue backing up on {{ $labels.node }}"
           description: "{{ $value }} embedding requests waiting on {{ $labels.node }}."
@@ -147,17 +158,19 @@ groups:
         labels:
           severity: warning
           service: embedding
+          notification: alerts-all
         annotations:
           summary: "High embedding latency on {{ $labels.node }}"
           description: "Embedding p99 latency is {{ $value }}s on {{ $labels.node }}."
           dashboard_url: "https://hoanghiep.grafana.net/d/layer-vllm-embedding"
 
       - alert: EmbeddingNoTraffic
-        expr: sum by (node) (rate(vllm:request_success_total{workload="embedding"}[5m])) == 0
-        for: 5m
+        expr: sum by (node) (rate(vllm:request_success_total{workload="embedding"}[24h])) == 0
+        for: 24h
         labels:
           severity: warning
           service: embedding
+          notification: alerts-all
         annotations:
           summary: "No embedding requests on {{ $labels.node }}"
           description: "Success request rate is 0 on {{ $labels.node }} for 5m — service may be idle or down."
