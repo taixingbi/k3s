@@ -332,8 +332,7 @@ On **gpu-node-1** (SSH to that host), try loopback — if this works but curls f
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:30080/docs
 ```
 
-Reliable from **server-node-1** without NodePort routing: use **port-forward** (see end of this section).
-
+#### inference-qwen25-7b.yaml
 
 [192.168.86.173:30080/docs](http://192.168.86.179:30080/docs)
 ```bash
@@ -361,7 +360,33 @@ curl http://192.168.86.179:30080/v1/chat/completions \
       "max_tokens": 50}'
 ```
 
+#### layer-gateway-inference.yaml
 
+[192.168.86.173:30180/docs](http://192.168.86.179:30180/docs)
+```bash
+# GPU-node-1
+curl http://192.168.86.173:30080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "where is jersey city"}], "max_tokens": 50}'
+```
+
+[192.168.86.176:30180/docs](http://192.168.86.179:30180/docs)
+```bash
+# GPU-node-2
+curl http://192.168.86.176:30080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "where is jersey city"}], "max_tokens": 50}'
+```
+
+[192.168.86.179:30180/docs](http://192.168.86.179:30180/docs)
+```bash
+# GPU-node-2
+curl http://192.168.86.179:30180/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages":
+      [{"role": "user", "content": "where is jersey city"}],
+      "max_tokens": 50}'
+```
 
 
 
