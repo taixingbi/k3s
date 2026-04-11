@@ -334,14 +334,18 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:30080/docs
 
 Reliable from **server-node-1** without NodePort routing: use **port-forward** (see end of this section).
 
+
+[192.168.86.173:30080/docs](http://192.168.86.179:30080/docs)
 ```bash
 # GPU-node-1
-curl http://192.168.86.173:30080/docs
 curl http://192.168.86.173:30080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "where is jersey city"}], "max_tokens": 50}'
+```
+
+[192.168.86.176:30080/docs](http://192.168.86.179:30080/docs)
+```bash
 # GPU-node-2
-curl http://192.168.86.176:30080/docs
 curl http://192.168.86.176:30080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "where is jersey city"}], "max_tokens": 50}'
@@ -349,12 +353,17 @@ curl http://192.168.86.176:30080/v1/chat/completions \
 
 [192.168.86.179:30080/docs](http://192.168.86.179:30080/docs)
 ```bash
+# GPU-node-2
 curl http://192.168.86.179:30080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages":
       [{"role": "user", "content": "where is jersey city"}],
       "max_tokens": 50}'
 ```
+
+
+
+
 
 Port **8000** is only inside the pod unless you use NodePort or `port-forward`:
 
