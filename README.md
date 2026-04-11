@@ -347,9 +347,8 @@ curl http://192.168.86.176:30080/v1/chat/completions \
   -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "where is jersey city"}], "max_tokens": 50}'
 ```
 
-```bash
-# Server-node-1
 [192.168.86.179:30080/docs](http://192.168.86.179:30080/docs)
+```bash
 curl http://192.168.86.179:30080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages":
