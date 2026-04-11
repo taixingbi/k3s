@@ -349,7 +349,7 @@ curl http://192.168.86.176:30080/v1/chat/completions \
 
 ```bash
 # Server-node-1
-curl http://192.168.86.179:30080/docs
+[192.168.86.179:30080/docs](http://192.168.86.179:30080/docs)
 curl http://192.168.86.179:30080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages":
