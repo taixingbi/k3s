@@ -17,6 +17,7 @@ Scripts and manifests for **server-node-1** as the k3s control plane and **gpu-n
 | `install-nvidia-gpu-operator.sh` | Helm install GPU Operator (k3s containerd paths + device-plugin `runtimeClassName` patch) |
 | `gpu-vectoradd-sample.yaml` | One-off pod: `nvidia-smi` to validate GPU scheduling |
 | `inference-qwen25-7b.yaml` | Namespace `ai`, vLLM Qwen2.5-7B (2 replicas), ClusterIP **`vllm-inference:8000`**, NodePort **30080** |
+| `layer-gateway-inference.yaml` | Namespace `ai`, [layer-gateway-inference-v1](https://github.com/taixingbi/layer-gateway-inference-v1) ([Docker Hub](https://hub.docker.com/r/taixingbi/layer-gateway-inference-v1)): request-level routing to vLLM on each GPU node; NodePort **30180**, in-cluster **`http://layer-gateway-inference.ai.svc.cluster.local:8010`** |
 | `prometheus-grafana.yaml` | Namespace `monitoring`: Prometheus scrapes vLLM + DCGM, **remote_write** to Grafana Cloud (no in-cluster Grafana) |
 | `input/dashboards/*.json` | Grafana dashboard exports (inference, embedding, GPU); import in Grafana Cloud ([`input/README.md`](input/README.md)) |
 | `input/alert/prometheus-alert-rules.yaml` | Prometheus-format rules for Grafana Cloud Alerting import |
@@ -232,6 +233,24 @@ sudo k3s kubectl get svc -n ai
 ```bash
 sudo k3s kubectl scale deployment inference-qwen25-7b -n ai --replicas=1
 sudo k3s kubectl scale deployment inference-qwen25-7b -n ai --replicas=2
+```
+
+## Inference routing gateway (`layer-gateway-inference.yaml`)
+
+[layer-gateway-inference-v1](https://github.com/taixingbi/layer-gateway-inference-v1) is published as [`taixingbi/layer-gateway-inference-v1`](https://hub.docker.com/r/taixingbi/layer-gateway-inference-v1). It proxies **`/v1/chat/completions`** to the two vLLM NodePort backends defined in the ConfigMap (defaults match this repo’s LAN: **192.168.86.173** and **192.168.86.176**, port **30080**). Cluster Service **`layer-gateway-inference`** exposes **8010**; NodePort **30180** matches the same firewall pattern as vLLM’s **30080**.
+
+On **server-node-1** (optional pre-pull; kubelet can pull on first schedule):
+
+```bash
+# sudo k3s ctr images pull docker.io/taixingbi/layer-gateway-inference-v1:latest
+sudo k3s kubectl apply -f layer-gateway-inference.yaml
+sudo k3s kubectl get pods,svc -n ai -l app=layer-gateway-inference
+```
+
+If **Prometheus** is already installed from this repo, re-apply so it picks up thhttp://192.168.86.173:30080/docse new **`layer-gateway-inference`** scrape job:
+
+```bash
+sudo k3s kubectl apply -f prometheus-grafana.yaml
 ```
 
 ### Test inference api
