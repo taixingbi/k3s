@@ -258,6 +258,7 @@ Expect **three** data keys with **non-zero** sizes. Decode **URL** and **usernam
 ```bash
 sudo k3s kubectl get secret alloy-grafana-cloud-loki -n monitoring -o jsonpath='{.data.loki-url}' | base64 -d; echo
 sudo k3s kubectl get secret alloy-grafana-cloud-loki -n monitoring -o jsonpath='{.data.loki-username}' | base64 -d; echo
+sudo k3s kubectl get secret alloy-grafana-cloud-loki -n monitoring -o jsonpath='{.data.api-key}' | base64 -d; echo
 ```
 
 If Alloy misbehaves after a Secret change, **`rollout restart`** the DaemonSet (pods do not reload Secret mounts in place).
