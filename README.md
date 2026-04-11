@@ -19,9 +19,10 @@ Scripts and manifests for **server-node-1** as the k3s control plane and **gpu-n
 | `inference-qwen25-7b.yaml` | Namespace `ai`, vLLM Qwen2.5-7B (2 replicas), ClusterIP **`vllm-inference:8000`**, NodePort **30080** |
 | `layer-gateway-inference.yaml` | Namespace `ai`, [layer-gateway-inference-v1](https://github.com/taixingbi/layer-gateway-inference-v1) ([Docker Hub](https://hub.docker.com/r/taixingbi/layer-gateway-inference-v1)): request-level routing to vLLM on each GPU node; NodePort **30180**, in-cluster **`http://layer-gateway-inference.ai.svc.cluster.local:8010`** |
 | `prometheus-grafana.yaml` | Namespace `monitoring`: Prometheus scrapes vLLM + DCGM, **remote_write** to Grafana Cloud (no in-cluster Grafana) |
-| `input/dashboards/*.json` | Grafana dashboard exports (inference, embedding, GPU); import in Grafana Cloud ([`input/README.md`](input/README.md)) |
-| `input/alert/prometheus-alert-rules.yaml` | Prometheus-format rules for Grafana Cloud Alerting import |
-| `tmp.md` | Local scratch notes (not part of install docs) |
+| `alloy-loki-cloud.yaml` | Namespace `monitoring`: Grafana Alloy **DaemonSet** tails pod logs (per-node), adds K8s labels, parses CRI + JSON, **loki.write** to Grafana Cloud Loki (no in-cluster Loki) |
+| `grafana-import/dashboard/*.json` | Grafana Cloud dashboard exports (Prometheus + **Loki** HTTP/log panels); see [`grafana-import/README.md`](grafana-import/README.md) |
+| `grafana-import/alert/prometheus-alert-rules.yaml` | Prometheus-format rules for Grafana Cloud Alerting import |
+| `tmp.md` / `tmp/` | Optional local scratch (gitignored; create yourself—never commit tokens or `glc_` keys) |
 
 ## Prerequisites
 
@@ -212,7 +213,67 @@ sudo k3s kubectl get svc -n gpu-operator | grep -i dcgm
 
 In Prometheus (port-forward), **Status → Targets**: job `dcgm-exporter` should be **up** per GPU node.
 
-In **Grafana Cloud**, import **`input/dashboards/*.json`** and alert rules from **`input/alert/prometheus-alert-rules.yaml`** (see [`input/README.md`](input/README.md)); originals live in [layer-observability-grafana](https://github.com/taixingbi/layer-observability-grafana).
+In **Grafana Cloud**, import dashboards from **`grafana-import/dashboard/`** (see [`grafana-import/README.md`](grafana-import/README.md)) and alert rules from **`grafana-import/alert/prometheus-alert-rules.yaml`**; Prometheus originals live in [layer-observability-grafana](https://github.com/taixingbi/layer-observability-grafana).
+
+## Logs: Grafana Alloy + Grafana Cloud Loki (`alloy-loki-cloud.yaml`)
+
+[Grafana Alloy](https://grafana.com/docs/alloy/latest/) runs as a **DaemonSet** (`alloy-logs`): each replica tails **only pods on that node** (`spec.nodeName` filter). Streams carry labels **`namespace`**, **`pod`**, **`container`**, **`app`** (`app.kubernetes.io/name` then `app`), **`node`**, **`job`** (`namespace/container`), plus **`cluster=k3s`** from **`loki.write`**. A **`loki.process`** pipeline runs **`stage.cri`** (CRI log framing) and **`stage.json`** for optional fields such as **`status`**, **`duration_ms`**, **`path`**, **`method`**, **`level`**—edit ConfigMap **`alloy-loki-config`** if your JSON uses different keys. In Grafana, use **`| json`** in LogQL to query those fields. There is **no in-cluster Loki**; everything goes to **Grafana Cloud** via **`loki.write`**.
+
+The manifest sets **`readOnlyRootFilesystem: true`**, **`emptyDir`** for **`/tmp`** and **`/var/lib/alloy/data`**, **`fsGroup: 473`**, and **`runAsUser`/`runAsGroup` `473`** (official Alloy image UID/GID) so the process can write state and temp files. **Liveness** uses **`/-/ready`**, not **`/-/healthy`**, so a bad Loki endpoint does not cause endless restarts (see [Alloy HTTP endpoints](https://grafana.com/docs/alloy/latest/reference/http/)).
+
+### Configure Grafana Cloud Loki
+
+1. In Grafana Cloud, create an access policy token with **`logs:write`**. From **Loki → Details**, copy the push **URL** (must end with **`/loki/api/v1/push`**) and the **User** (numeric id for basic auth).
+
+2. Apply the manifest (placeholders in the bundled Secret are overwritten in the next step—do not put real secrets in git):
+
+```bash
+sudo k3s kubectl apply -f alloy-loki-cloud.yaml
+```
+
+3. Patch Secret **`alloy-grafana-cloud-loki`** in **`monitoring`**. Wrap the Grafana token in **single quotes** so the shell does not treat **`$`** inside **`glc_...`** as variable expansion (`"$glc_..."` is wrong and stores an empty or broken key).
+
+```bash
+sudo k3s kubectl create secret generic alloy-grafana-cloud-loki -n monitoring \
+  --from-literal=loki-url='https://logs-prod-036.grafana.net/loki/api/v1/push' \
+  --from-literal=loki-username='1529533' \
+  --from-literal=api-key='glc_YOUR_TOKEN_HERE' \
+  --dry-run=client -o yaml | sudo k3s kubectl apply -f -
+
+sudo k3s kubectl rollout restart daemonset/alloy-logs -n monitoring
+sudo k3s kubectl rollout status daemonset/alloy-logs -n monitoring
+```
+
+Optional: keep a local override file matching **`*-secret.local.yaml`** (gitignored) and `kubectl apply -f` it instead of embedding secrets in commands.
+
+### Verify Alloy and the Secret
+
+```bash
+sudo k3s kubectl get pods -n monitoring -l app.kubernetes.io/name=alloy-logs -o wide
+sudo k3s kubectl describe secret alloy-grafana-cloud-loki -n monitoring
+```
+
+Expect **three** data keys with **non-zero** sizes. Decode **URL** and **username** only (avoid printing **`api-key`** in shared logs):
+
+```bash
+sudo k3s kubectl get secret alloy-grafana-cloud-loki -n monitoring -o jsonpath='{.data.loki-url}' | base64 -d; echo
+sudo k3s kubectl get secret alloy-grafana-cloud-loki -n monitoring -o jsonpath='{.data.loki-username}' | base64 -d; echo
+```
+
+If Alloy misbehaves after a Secret change, **`rollout restart`** the DaemonSet (pods do not reload Secret mounts in place).
+
+### Grafana Cloud: Explore and dashboards
+
+In **Explore → Loki**, try `{cluster="k3s", namespace="ai"}`. Import **`grafana-import/dashboard/loki-logs-http.json`** for **4xx/5xx**, **p95/p99** on **`duration_ms`**, **top routes**, and **5xx by `path`** (panels assume JSON keys **`status`**, **`path`**, **`duration_ms`**; adjust queries or the Alloy **`stage.json`** block if your apps differ).
+
+### Alloy troubleshooting (short)
+
+| Symptom | Likely cause |
+|---------|----------------|
+| **`mkdir /var/lib/alloy/data: permission denied`** | Missing **`fsGroup`/`runAsUser` `473`** or no writable **`emptyDir`** for data/tmp—use the current **`alloy-loki-cloud.yaml`**. |
+| **`401` / `403`** in Alloy logs | Wrong **Loki user id** or token; token missing **`logs:write`**; re-patch Secret with **single-quoted** `api-key`. |
+| **`secret unchanged`** after `kubectl apply` | Same desired Secret as cluster; if you meant to change the token, use a new value and re-apply, then **restart** Alloy. |
+| Pods **Running** but no lines in Loki | Narrow time range; confirm workloads emit logs; check Alloy logs for push errors. |
 
 ## vLLM: Qwen2.5-7B-Instruct (`inference-qwen25-7b.yaml`)
 
@@ -247,7 +308,7 @@ sudo k3s kubectl apply -f layer-gateway-inference.yaml
 sudo k3s kubectl get pods,svc -n ai -l app=layer-gateway-inference
 ```
 
-If **Prometheus** is already installed from this repo, re-apply so it picks up thhttp://192.168.86.173:30080/docse new **`layer-gateway-inference`** scrape job:
+If **Prometheus** is already installed from this repo, re-apply so it picks up the new **`layer-gateway-inference`** scrape job:
 
 ```bash
 sudo k3s kubectl apply -f prometheus-grafana.yaml

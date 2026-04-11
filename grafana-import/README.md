@@ -4,16 +4,17 @@ Copied from [layer-observability-grafana](https://github.com/taixingbi/layer-obs
 
 | Path | Upstream |
 |------|----------|
-| `dashboards/inference.json` | [dashboards/inference.json](https://github.com/taixingbi/layer-observability-grafana/blob/main/dashboards/inference.json) |
-| `dashboards/embedding.json` | [dashboards/embedding.json](https://github.com/taixingbi/layer-observability-grafana/blob/main/dashboards/embedding.json) |
-| `dashboards/gpu.json` | [dashboards/gpu.json](https://github.com/taixingbi/layer-observability-grafana/blob/main/dashboards/gpu.json) |
+| `dashboard/inference.json` | [dashboards/inference.json](https://github.com/taixingbi/layer-observability-grafana/blob/main/dashboards/inference.json) |
+| `dashboard/embedding.json` | [dashboards/embedding.json](https://github.com/taixingbi/layer-observability-grafana/blob/main/dashboards/embedding.json) |
+| `dashboard/gpu.json` | [dashboards/gpu.json](https://github.com/taixingbi/layer-observability-grafana/blob/main/dashboards/gpu.json) |
+| `dashboard/loki-logs-http.json` | This repo: Loki / JSON log panels (4xx, 5xx, p95/p99, routes); use with `alloy-loki-cloud.yaml` |
 | `alert/prometheus-alert-rules.yaml` | [alert/prometheus-alert-rules.yaml](https://github.com/taixingbi/layer-observability-grafana/blob/main/alert/prometheus-alert-rules.yaml) |
 
 ## Dashboards
 
 1. Grafana Cloud → **Dashboards** → **New** → **Import**.
-2. Upload `inference.json`, `embedding.json`, or `gpu.json`.
-3. Map **Prometheus** to your **hosted Prometheus / Mimir** datasource (same as Explore).
+2. Upload `inference.json`, `embedding.json`, `gpu.json`, and (for Loki) `loki-logs-http.json`.
+3. Map **Prometheus** or **Loki** to your Grafana Cloud datasource (same as Explore).
 4. Save.
 
 Dashboards use `__inputs` for the datasource UID; Grafana prompts on import.

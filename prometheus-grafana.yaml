@@ -6,6 +6,7 @@
 #   - workload=gpu-telemetry: DCGM per-GPU metrics (gpu-operator)
 #   - workload=embedding: vLLM embed on node LAN :8001 (static targets; pod→host routing)
 # Stack aligns with: https://github.com/taixingbi/layer-observability-grafana
+# Pod logs → Grafana Cloud Loki: companion manifest `alloy-loki-cloud.yaml` (Alloy DaemonSet, loki.write).
 #
 # Apply after vLLM + `vllm-inference` exist in `ai`, and GPU Operator exposes
 # DCGM Service in `gpu-operator` (port 9400, /metrics); name usually ends with `dcgm-exporter`.

@@ -1,4 +1,6 @@
 # Local-only secrets (never commit tokens)
 prometheus-grafana-cloud-secret.local.yaml
 *-secret.local.yaml
+# Local scratch (may contain pasted commands/tokens)
 tmp/
+tmp.md
