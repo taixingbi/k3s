@@ -322,7 +322,7 @@ sudo k3s kubectl apply -f layer-gateway-inference-dev.yaml -f layer-gateway-infe
 sudo k3s kubectl rollout restart deployment/layer-gateway-inference -n ai-dev
 sudo k3s kubectl get pods,svc -n ai-dev -l app=layer-gateway-inference
 # prod
-sudo k3s kubectl apply -f layer-gateway-inference-dev.yaml -f layer-gateway-inference-prod.yaml
+sudo k3s kubectl apply -f layer-gateway-inference-prod.yaml -f layer-gateway-inference-prod.yaml
 sudo k3s kubectl rollout restart deployment/layer-gateway-inference -n ai-prod
 sudo k3s kubectl get pods,svc -n ai-prod -l app=layer-gateway-inference
 ```
