@@ -313,16 +313,21 @@ Each gateway pod sets **`GATEWAY_CONFIG`**, **`GATEWAY_ENV`**, **`ENV`** (same v
 
 On **server-node-1** (optional pre-pull; kubelet can pull on first schedule):
 
+**Before first apply:** NodePort **30180** is cluster-wide. If you still have the legacy gateway **Service** in namespace **`ai`** (or anything else on **30180**), remove it *before* applying **`ai-dev`**, or apply will fail with `provided port is already allocated`.
+
 ```bash
 # sudo k3s ctr images pull docker.io/taixingbi/layer-gateway-inference-v1:latest
-sudo k3s kubectl apply -f layer-gateway-inference-dev.yaml -f layer-gateway-inference-prod.yaml
+# dev
+sudo k3s kubectl apply -f layer-gateway-inference-dev.yaml -f layer-gateway-inference-dev.yaml
 sudo k3s kubectl rollout restart deployment/layer-gateway-inference -n ai-dev
-sudo k3s kubectl rollout restart deployment/layer-gateway-inference -n ai-prod
 sudo k3s kubectl get pods,svc -n ai-dev -l app=layer-gateway-inference
+# prod
+sudo k3s kubectl apply -f layer-gateway-inference-dev.yaml -f layer-gateway-inference-prod.yaml
+sudo k3s kubectl rollout restart deployment/layer-gateway-inference -n ai-prod
 sudo k3s kubectl get pods,svc -n ai-prod -l app=layer-gateway-inference
 ```
 
-If you previously ran the old **single-namespace `ai`** gateway (same NodePort **30180**), remove it before or after applying the new manifests so NodePort **30180** is not held by the legacy Service: `kubectl delete svc,deployment,configmap -n ai -l app=layer-gateway-inference` (only if those objects still exist).
+**Troubleshooting:** If apply still reports `spec.ports[0].nodePort: Invalid value: 30180: provided port is already allocated`, run `sudo k3s kubectl get svc -A -o wide | grep 30180`, delete that **Service** (or change its type / nodePort), then re-apply **`layer-gateway-inference-dev.yaml`**.
 
 If **Prometheus** is already installed from this repo, re-apply so it scrapes gateways in **`ai-dev`** and **`ai-prod`**:
 
