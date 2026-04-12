@@ -1,20 +1,20 @@
-# GPU-aware routing gateway for vLLM (replaces blind Service LB for chat).
+# Gateway — dev (namespace ai-dev, NodePort 30180).
+# vLLM stays in namespace `ai` (apply inference-qwen25-7b.yaml first); backends use LAN NodePort 30080.
 # Image: https://hub.docker.com/r/taixingbi/layer-gateway-inference-v1
 # Source: https://github.com/taixingbi/layer-gateway-inference-v1
-# Structured JSON log schema (event names, success/failure rules): README → "Gateway structured logs".
 #
-# Apply after namespace `ai` and inference NodePort exist (`inference-qwen25-7b.yaml`).
-# Backends use the same LAN + NodePort pattern as the upstream default config (one URL
-# per GPU node). Edit the ConfigMap if your IPs or nodePort differ.
-#
-# Pre-pull on each node that may run this pod (optional):
-#   sudo k3s ctr images pull docker.io/taixingbi/layer-gateway-inference-v1:latest
+# Optional: sudo k3s ctr images pull docker.io/taixingbi/layer-gateway-inference-v1:latest
 
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-dev
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: layer-gateway-inference-config
-  namespace: ai
+  namespace: ai-dev
 data:
   config.yaml: |
     server:
@@ -65,9 +65,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: layer-gateway-inference
-  namespace: ai
+  namespace: ai-dev
   labels:
     app: layer-gateway-inference
+    environment: dev
 spec:
   replicas: 1
   selector:
@@ -77,6 +78,7 @@ spec:
     metadata:
       labels:
         app: layer-gateway-inference
+        environment: dev
     spec:
       automountServiceAccountToken: false
       containers:
@@ -91,6 +93,10 @@ spec:
               value: /app/config.yaml
             - name: GATEWAY_ENV
               value: dev
+            - name: ENV
+              value: dev
+            - name: SERVICE_NAME
+              value: gateway
             - name: LOG_TIMEZONE
               value: EST
           volumeMounts:
@@ -128,9 +134,10 @@ apiVersion: v1
 kind: Service
 metadata:
   name: layer-gateway-inference
-  namespace: ai
+  namespace: ai-dev
   labels:
     app: layer-gateway-inference
+    environment: dev
 spec:
   type: NodePort
   selector:

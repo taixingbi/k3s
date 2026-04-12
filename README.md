@@ -17,7 +17,8 @@ Scripts and manifests for **server-node-1** as the k3s control plane and **gpu-n
 | `install-nvidia-gpu-operator.sh` | Helm install GPU Operator (k3s containerd paths + device-plugin `runtimeClassName` patch) |
 | `gpu-vectoradd-sample.yaml` | One-off pod: `nvidia-smi` to validate GPU scheduling |
 | `inference-qwen25-7b.yaml` | Namespace `ai`, vLLM Qwen2.5-7B (2 replicas), ClusterIP **`vllm-inference:8000`**, NodePort **30080** |
-| `layer-gateway-inference.yaml` | Namespace `ai`, [layer-gateway-inference-v1](https://github.com/taixingbi/layer-gateway-inference-v1) ([Docker Hub](https://hub.docker.com/r/taixingbi/layer-gateway-inference-v1)): request-level routing to vLLM on each GPU node; NodePort **30180**, in-cluster **`http://layer-gateway-inference.ai.svc.cluster.local:8010`** |
+| `layer-gateway-inference-dev.yaml` | Namespace **`ai-dev`**, [layer-gateway-inference-v1](https://github.com/taixingbi/layer-gateway-inference-v1): gateway **`GATEWAY_ENV`/`ENV`=`dev`**, NodePort **30180**, in-cluster **`http://layer-gateway-inference.ai-dev.svc.cluster.local:8010`** |
+| `layer-gateway-inference-prod.yaml` | Namespace **`ai-prod`**, same image: **`GATEWAY_ENV`/`ENV`=`prod`**, NodePort **30380**, in-cluster **`http://layer-gateway-inference.ai-prod.svc.cluster.local:8010`** |
 | `prometheus-grafana.yaml` | Namespace `monitoring`: Prometheus scrapes vLLM + DCGM, **remote_write** to Grafana Cloud (no in-cluster Grafana) |
 | `alloy-loki-cloud.yaml` | Namespace `monitoring`: Grafana Alloy **DaemonSet** tails pod logs (per-node), adds K8s labels, parses CRI + JSON, **loki.write** to Grafana Cloud Loki (no in-cluster Loki) |
 | `grafana-import/dashboard/*.json` | Grafana Cloud dashboard exports (Prometheus + **Loki** HTTP/log panels); see [`grafana-import/README.md`](grafana-import/README.md) |
@@ -265,7 +266,7 @@ If Alloy misbehaves after a Secret change, **`rollout restart`** the DaemonSet (
 
 ### Grafana Cloud: Explore and dashboards
 
-In **Explore → Loki**, try `{cluster="k3s", namespace="ai"}`. Import **`grafana-import/dashboard/loki-logs-http.json`** for **4xx/5xx**, **p95/p99** on **`duration_ms`**, **top routes**, and **5xx by `path`** (panels assume JSON keys **`status`**, **`path`**, **`duration_ms`**; adjust queries or the Alloy **`stage.json`** block if your apps differ).
+In **Explore → Loki**, try `{cluster="k3s", namespace=~"ai|ai-dev|ai-prod"}`, or narrow to **`namespace="ai-dev"`** / **`namespace="ai-prod"`** for gateway logs only. Import **`grafana-import/dashboard/loki-logs-http.json`** for **4xx/5xx**, **p95/p99** on **`duration_ms`**, **top routes**, and **5xx by `path`** (panels assume JSON keys **`status`**, **`path`**, **`duration_ms`**; adjust queries or the Alloy **`stage.json`** block if your apps differ).
 
 ### Alloy troubleshooting (short)
 
@@ -297,20 +298,33 @@ sudo k3s kubectl scale deployment inference-qwen25-7b -n ai --replicas=1
 sudo k3s kubectl scale deployment inference-qwen25-7b -n ai --replicas=2
 ```
 
-## Inference routing gateway (`layer-gateway-inference.yaml`)
+## Inference routing gateway (`layer-gateway-inference-*.yaml`)
 
-[layer-gateway-inference-v1](https://github.com/taixingbi/layer-gateway-inference-v1) is published as [`taixingbi/layer-gateway-inference-v1`](https://hub.docker.com/r/taixingbi/layer-gateway-inference-v1). It proxies **`/v1/chat/completions`** to the two vLLM NodePort backends defined in the ConfigMap (defaults match this repo’s LAN: **192.168.86.173** and **192.168.86.176**, port **30080**). Cluster Service **`layer-gateway-inference`** exposes **8010**; NodePort **30180** matches the same firewall pattern as vLLM’s **30080**.
+[layer-gateway-inference-v1](https://github.com/taixingbi/layer-gateway-inference-v1) is published as [`taixingbi/layer-gateway-inference-v1`](https://hub.docker.com/r/taixingbi/layer-gateway-inference-v1). It proxies **`/v1/chat/completions`** to the two vLLM NodePort backends in the per-environment ConfigMap (defaults match this repo’s LAN: **192.168.86.173** and **192.168.86.176**, vLLM NodePort **30080** in namespace **`ai`**).
+
+**Cluster layout:** one k3s cluster, **namespaces per environment** (`ai-dev`, `ai-prod`; **`ai-qa`** and NodePort **30280** can follow the same pattern later). Each manifest defines Namespace, ConfigMap, Deployment, and Service.
+
+| Environment | Namespace | NodePort | `GATEWAY_ENV` / `ENV` |
+|---------------|-----------|----------|------------------------|
+| dev | `ai-dev` | **30180** | `dev` |
+| prod | `ai-prod` | **30380** | `prod` |
+
+Each gateway pod sets **`GATEWAY_CONFIG`**, **`GATEWAY_ENV`**, **`ENV`** (same value as `GATEWAY_ENV` for generic tooling), **`SERVICE_NAME=gateway`**, and **`LOG_TIMEZONE=EST`**. Non-sensitive routing config lives in the ConfigMap; add **`envFrom`** with **`secretRef`** in the Deployment when you introduce API keys.
 
 On **server-node-1** (optional pre-pull; kubelet can pull on first schedule):
 
 ```bash
 # sudo k3s ctr images pull docker.io/taixingbi/layer-gateway-inference-v1:latest
-sudo k3s kubectl apply -f layer-gateway-inference.yaml
-sudo k3s kubectl rollout restart deployment layer-gateway-inference -n ai
-sudo k3s kubectl get pods,svc -n ai -l app=layer-gateway-inference
+sudo k3s kubectl apply -f layer-gateway-inference-dev.yaml -f layer-gateway-inference-prod.yaml
+sudo k3s kubectl rollout restart deployment/layer-gateway-inference -n ai-dev
+sudo k3s kubectl rollout restart deployment/layer-gateway-inference -n ai-prod
+sudo k3s kubectl get pods,svc -n ai-dev -l app=layer-gateway-inference
+sudo k3s kubectl get pods,svc -n ai-prod -l app=layer-gateway-inference
 ```
 
-If **Prometheus** is already installed from this repo, re-apply so it picks up the new **`layer-gateway-inference`** scrape job:
+If you previously ran the old **single-namespace `ai`** gateway (same NodePort **30180**), remove it before or after applying the new manifests so NodePort **30180** is not held by the legacy Service: `kubectl delete svc,deployment,configmap -n ai -l app=layer-gateway-inference` (only if those objects still exist).
+
+If **Prometheus** is already installed from this repo, re-apply so it scrapes gateways in **`ai-dev`** and **`ai-prod`**:
 
 ```bash
 sudo k3s kubectl apply -f prometheus-grafana.yaml
@@ -320,7 +334,7 @@ sudo k3s kubectl apply -f prometheus-grafana.yaml
 
 Reference for **[layer-gateway-inference-v1](https://github.com/taixingbi/layer-gateway-inference-v1)**: emit **one JSON object per line** on stdout so Alloy **`stage.cri`** + **`stage.json`** (see `alloy-loki-cloud.yaml`) and Grafana Explore can parse **`level`**, paths, and latency.
 
-The **`ts`** field uses **`LOG_TIMEZONE`** (IANA id, e.g. **`EST`** or **`America/New_York`**). The bundled **`layer-gateway-inference.yaml`** sets **`LOG_TIMEZONE=EST`** on the gateway pod.
+The **`ts`** field uses **`LOG_TIMEZONE`** (IANA id, e.g. **`EST`** or **`America/New_York`**). The bundled gateway manifests set **`LOG_TIMEZONE=EST`** on each Deployment.
 
 **Envelope** (omit unused fields; add **`error`** only on failure):
 
@@ -390,7 +404,7 @@ The **`ts`** field uses **`LOG_TIMEZONE`** (IANA id, e.g. **`EST`** or **`Americ
 | `circuit_half_open` | INFO | Trial probe |
 | `circuit_closed` | INFO | Backend healthy again |
 
-**LogQL examples** (Grafana Explore → Loki): `{cluster="k3s", namespace="ai", app="layer-gateway-inference"} | json | event="proxy_response"`, or `| json | level="ERROR"`.
+**LogQL examples** (Grafana Explore → Loki): `{cluster="k3s", namespace=~"ai-(dev|prod)", app="layer-gateway-inference"} | json | event="proxy_response"`, or `| json | level="ERROR"`.
 
 ### Test inference api
 
@@ -438,11 +452,11 @@ curl http://192.168.86.179:30080/v1/chat/completions \
       "max_tokens": 50}'
 ```
 
-#### layer-gateway-inference.yaml
+#### layer-gateway-inference-dev.yaml (NodePort **30180**)
 
 [192.168.86.173:30180/docs](http://192.168.86.179:30180/docs)
 ```bash
-# GPU-node-1
+# GPU-node-1 — dev gateway
 curl http://192.168.86.173:30180/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "where is jersey city"}], "max_tokens": 50}'
@@ -450,7 +464,7 @@ curl http://192.168.86.173:30180/v1/chat/completions \
 
 [192.168.86.176:30180/docs](http://192.168.86.179:30180/docs)
 ```bash
-# GPU-node-2
+# GPU-node-2 — dev gateway
 curl http://192.168.86.176:30180/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "where is jersey city"}], "max_tokens": 50}'
@@ -458,12 +472,21 @@ curl http://192.168.86.176:30180/v1/chat/completions \
 
 [192.168.86.179:30180/docs](http://192.168.86.179:30180/docs)
 ```bash
-# GPU-node-2
+# GPU-node-2 — dev gateway
 curl http://192.168.86.179:30180/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages":
       [{"role": "user", "content": "where is jersey city"}],
       "max_tokens": 50}'
+```
+
+#### layer-gateway-inference-prod.yaml (NodePort **30380**)
+
+```bash
+# prod gateway (same payload; open firewall for 30380/tcp if needed)
+curl http://192.168.86.173:30380/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "Qwen/Qwen2.5-7B-Instruct", "messages": [{"role": "user", "content": "where is jersey city"}], "max_tokens": 50}'
 ```
 
 

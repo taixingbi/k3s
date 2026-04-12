@@ -2,7 +2,7 @@
 # only Prometheus + remote_write live here. Use Grafana Cloud for dashboards.
 # Scrapes (filter in Grafana with label workload=inference|gateway-inference|embedding|gpu-telemetry):
 #   - workload=inference: vLLM chat/completions via Service vllm-inference (ai)
-#   - workload=gateway-inference: routing gateway /metrics (Service layer-gateway-inference, ai)
+#   - workload=gateway-inference: routing gateway /metrics (Service layer-gateway-inference, ai-dev / ai-prod)
 #   - workload=gpu-telemetry: DCGM per-GPU metrics (gpu-operator)
 #   - workload=embedding: vLLM embed on node LAN :8001 (static targets; pod→host routing)
 # Stack aligns with: https://github.com/taixingbi/layer-observability-grafana
@@ -107,7 +107,8 @@ data:
           - role: endpoints
             namespaces:
               names:
-                - ai
+                - ai-dev
+                - ai-prod
         relabel_configs:
           - source_labels: [__meta_kubernetes_service_name]
             action: keep

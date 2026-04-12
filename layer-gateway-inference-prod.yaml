@@ -1,8 +1,20 @@
+# Gateway — prod (namespace ai-prod, NodePort 30380).
+# vLLM stays in namespace `ai` (apply inference-qwen25-7b.yaml first); backends use LAN NodePort 30080.
+# Image: https://hub.docker.com/r/taixingbi/layer-gateway-inference-v1
+# Source: https://github.com/taixingbi/layer-gateway-inference-v1
+#
+# Optional: sudo k3s ctr images pull docker.io/taixingbi/layer-gateway-inference-v1:latest
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-prod
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: layer-gateway-inference-config
-  namespace: ai
+  namespace: ai-prod
 data:
   config.yaml: |
     server:
@@ -48,15 +60,15 @@ data:
     retry:
       max_attempts: 2
       retryable_statuses: [502, 503, 504]
-
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: layer-gateway-inference
-  namespace: ai
+  namespace: ai-prod
   labels:
     app: layer-gateway-inference
+    environment: prod
 spec:
   replicas: 1
   selector:
@@ -66,18 +78,25 @@ spec:
     metadata:
       labels:
         app: layer-gateway-inference
+        environment: prod
     spec:
       automountServiceAccountToken: false
       containers:
         - name: gateway
           image: docker.io/taixingbi/layer-gateway-inference-v1:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8010
           env:
             - name: GATEWAY_CONFIG
               value: /app/config.yaml
+            - name: GATEWAY_ENV
+              value: prod
+            - name: ENV
+              value: prod
+            - name: SERVICE_NAME
+              value: gateway
             - name: LOG_TIMEZONE
               value: EST
           volumeMounts:
@@ -110,15 +129,15 @@ spec:
         - name: config
           configMap:
             name: layer-gateway-inference-config
-
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: layer-gateway-inference
-  namespace: ai
+  namespace: ai-prod
   labels:
     app: layer-gateway-inference
+    environment: prod
 spec:
   type: NodePort
   selector:
@@ -127,4 +146,4 @@ spec:
     - name: http
       port: 8010
       targetPort: http
-      nodePort: 30180
+      nodePort: 30380
