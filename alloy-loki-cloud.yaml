@@ -152,11 +152,13 @@ data:
       stage.json {
         drop_malformed = false
         expressions = {
-          http_status = "status",
+          http_status  = "status",
+          status_code  = "status_code",
           duration_ms  = "duration_ms",
           route        = "path",
           method       = "method",
           level        = "level",
+          event        = "event",
         }
       }
     }

@@ -1,15 +1,3 @@
-# GPU-aware routing gateway for vLLM (replaces blind Service LB for chat).
-# Image: https://hub.docker.com/r/taixingbi/layer-gateway-inference-v1
-# Source: https://github.com/taixingbi/layer-gateway-inference-v1
-# Structured JSON log schema (event names, success/failure rules): README → "Gateway structured logs".
-#
-# Apply after namespace `ai` and inference NodePort exist (`inference-qwen25-7b.yaml`).
-# Backends use the same LAN + NodePort pattern as the upstream default config (one URL
-# per GPU node). Edit the ConfigMap if your IPs or nodePort differ.
-#
-# Pre-pull on each node that may run this pod (optional):
-#   sudo k3s ctr images pull docker.io/taixingbi/layer-gateway-inference-v1:latest
-
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -60,6 +48,7 @@ data:
     retry:
       max_attempts: 2
       retryable_statuses: [502, 503, 504]
+
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -82,15 +71,13 @@ spec:
       containers:
         - name: gateway
           image: docker.io/taixingbi/layer-gateway-inference-v1:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 8010
           env:
             - name: GATEWAY_CONFIG
               value: /app/config.yaml
-            - name: GATEWAY_ENV
-              value: dev
             - name: LOG_TIMEZONE
               value: EST
           volumeMounts:
@@ -123,6 +110,7 @@ spec:
         - name: config
           configMap:
             name: layer-gateway-inference-config
+
 ---
 apiVersion: v1
 kind: Service

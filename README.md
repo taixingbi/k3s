@@ -217,7 +217,7 @@ In **Grafana Cloud**, import dashboards from **`grafana-import/dashboard/`** (se
 
 ## Logs: Grafana Alloy + Grafana Cloud Loki (`alloy-loki-cloud.yaml`)
 
-[Grafana Alloy](https://grafana.com/docs/alloy/latest/) runs as a **DaemonSet** (`alloy-logs`): each replica tails **only pods on that node** (`spec.nodeName` filter). Streams carry labels **`namespace`**, **`pod`**, **`container`**, **`app`** (`app.kubernetes.io/name` then `app`), **`node`**, **`job`** (`namespace/container`), plus **`cluster=k3s`** from **`loki.write`**. A **`loki.process`** pipeline runs **`stage.cri`** (CRI log framing) and **`stage.json`** for optional fields such as **`status`**, **`duration_ms`**, **`path`**, **`method`**, **`level`**—edit ConfigMap **`alloy-loki-config`** if your JSON uses different keys. In Grafana, use **`| json`** in LogQL to query those fields. There is **no in-cluster Loki**; everything goes to **Grafana Cloud** via **`loki.write`**.
+[Grafana Alloy](https://grafana.com/docs/alloy/latest/) runs as a **DaemonSet** (`alloy-logs`): each replica tails **only pods on that node** (`spec.nodeName` filter). Streams carry labels **`namespace`**, **`pod`**, **`container`**, **`app`** (`app.kubernetes.io/name` then `app`), **`node`**, **`job`** (`namespace/container`), plus **`cluster=k3s`** from **`loki.write`**. A **`loki.process`** pipeline runs **`stage.cri`** (CRI log framing) and **`stage.json`** for optional fields such as **`status`**, **`status_code`**, **`duration_ms`**, **`path`**, **`method`**, **`level`**, **`event`** (gateway JSON)—edit ConfigMap **`alloy-loki-config`** if your JSON uses different keys. In Grafana, use **`| json`** in LogQL to query those fields. There is **no in-cluster Loki**; everything goes to **Grafana Cloud** via **`loki.write`**.
 
 The manifest sets **`readOnlyRootFilesystem: true`**, **`emptyDir`** for **`/tmp`** and **`/var/lib/alloy/data`**, **`fsGroup: 473`**, and **`runAsUser`/`runAsGroup` `473`** (official Alloy image UID/GID) so the process can write state and temp files. **Liveness** uses **`/-/ready`**, not **`/-/healthy`**, so a bad Loki endpoint does not cause endless restarts (see [Alloy HTTP endpoints](https://grafana.com/docs/alloy/latest/reference/http/)).
 
@@ -253,12 +253,12 @@ sudo k3s kubectl get pods -n monitoring -l app.kubernetes.io/name=alloy-logs -o 
 sudo k3s kubectl describe secret alloy-grafana-cloud-loki -n monitoring
 ```
 
-Expect **three** data keys with **non-zero** sizes. Decode **URL** and **username** only (avoid printing **`api-key`** in shared logs):
+Expect **three** data keys with **non-zero** sizes. Decode **URL** and **username**; confirm **`api-key`** is present without printing it (e.g. decoded byte count should be well above zero):
 
 ```bash
 sudo k3s kubectl get secret alloy-grafana-cloud-loki -n monitoring -o jsonpath='{.data.loki-url}' | base64 -d; echo
 sudo k3s kubectl get secret alloy-grafana-cloud-loki -n monitoring -o jsonpath='{.data.loki-username}' | base64 -d; echo
-sudo k3s kubectl get secret alloy-grafana-cloud-loki -n monitoring -o jsonpath='{.data.api-key}' | base64 -d; echo
+sudo k3s kubectl get secret alloy-grafana-cloud-loki -n monitoring -o jsonpath='{.data.api-key}' | base64 -d | wc -c
 ```
 
 If Alloy misbehaves after a Secret change, **`rollout restart`** the DaemonSet (pods do not reload Secret mounts in place).
@@ -306,6 +306,7 @@ On **server-node-1** (optional pre-pull; kubelet can pull on first schedule):
 ```bash
 # sudo k3s ctr images pull docker.io/taixingbi/layer-gateway-inference-v1:latest
 sudo k3s kubectl apply -f layer-gateway-inference.yaml
+sudo k3s kubectl rollout restart deployment layer-gateway-inference -n ai
 sudo k3s kubectl get pods,svc -n ai -l app=layer-gateway-inference
 ```
 
@@ -314,6 +315,82 @@ If **Prometheus** is already installed from this repo, re-apply so it picks up t
 ```bash
 sudo k3s kubectl apply -f prometheus-grafana.yaml
 ```
+
+### Gateway structured logs (Loki / Grafana)
+
+Reference for **[layer-gateway-inference-v1](https://github.com/taixingbi/layer-gateway-inference-v1)**: emit **one JSON object per line** on stdout so Alloy **`stage.cri`** + **`stage.json`** (see `alloy-loki-cloud.yaml`) and Grafana Explore can parse **`level`**, paths, and latency.
+
+The **`ts`** field uses **`LOG_TIMEZONE`** (IANA id, e.g. **`EST`** or **`America/New_York`**). The bundled **`layer-gateway-inference.yaml`** sets **`LOG_TIMEZONE=EST`** on the gateway pod.
+
+**Envelope** (omit unused fields; add **`error`** only on failure):
+
+```json
+{
+  "ts": "2026-04-11T07:00:00-05:00",
+  "level": "INFO",
+  "event": "proxy_response",
+  "service": "gateway",
+  "env": "prod",
+  "trace_id": "…",
+  "request_id": "…",
+  "session_id": "…",
+  "path": "/v1/chat/completions",
+  "backend": "vllm-1",
+  "latency_ms": 123,
+  "status_code": 200
+}
+```
+
+**Failure example** (include **`error`**; set **`level`** to **`WARN`** or **`ERROR`** as appropriate):
+
+```json
+{
+  "ts": "2026-04-11T07:00:00-05:00",
+  "level": "ERROR",
+  "event": "proxy_final_failure",
+  "service": "gateway",
+  "env": "prod",
+  "path": "/v1/chat/completions",
+  "backend": "gpu-node-1",
+  "latency_ms": 30000,
+  "error": {
+    "type": "UpstreamTimeout",
+    "message": "deadline exceeded",
+    "code": "upstream_timeout",
+    "retryable": false
+  }
+}
+```
+
+**Rules**
+
+- **Success:** do **not** include an **`error`** property (or use `null` only if your parser requires a key—prefer omission for success).
+- **Failure:** include **`error`** as an object: **`type`**, **`message`**, **`code`**, **`retryable`** (boolean).
+
+**`level`:** use **`INFO`**, **`WARN`**, or **`ERROR`** (uppercase) so log level filters stay consistent.
+
+**`event` values** (lifecycle and proxy):
+
+| `event` | Typical `level` | Notes |
+|--------|-----------------|--------|
+| `gateway_started` | INFO | Listen address, backend names |
+| `request_received` | INFO | New HTTP request |
+| `request_classified` | INFO | Route / stream vs non-stream |
+| `request_enqueued` | INFO | Accepted into scheduler queue |
+| `request_rejected` | WARN or ERROR | Queue full, validation, auth—include **`error`** |
+| `request_dispatched` | INFO | Backend chosen |
+| `proxy_start` | INFO | Upstream request begins |
+| `proxy_response` | INFO | Upstream completed with **`status_code`** |
+| `proxy_transport_error` | WARN or ERROR | TCP/TLS/reset—include **`error`** |
+| `proxy_retry` | WARN | Retry scheduled; optional **`error`** from last attempt |
+| `proxy_final_failure` | ERROR | Retries exhausted—include **`error`** |
+| `stream_first_byte` | INFO | First chunk to client (streaming) |
+| `stream_complete` | INFO | Stream finished cleanly |
+| `circuit_opened` | WARN | Backend marked unhealthy |
+| `circuit_half_open` | INFO | Trial probe |
+| `circuit_closed` | INFO | Backend healthy again |
+
+**LogQL examples** (Grafana Explore → Loki): `{cluster="k3s", namespace="ai", app="layer-gateway-inference"} | json | event="proxy_response"`, or `| json | level="ERROR"`.
 
 ### Test inference api
 
