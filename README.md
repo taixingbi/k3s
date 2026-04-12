@@ -153,15 +153,18 @@ In **Grafana / Explore**, narrow to LLM paths with e.g. `{workload="inference"}`
 
 1. **Put a real token in the Secret** (Grafana Cloud access policy with **`metrics:write`**). Do **not** commit real `glc_` tokens to git. If a token was ever pasted into chat, email, or a repo, **revoke it** in Grafana Cloud and create a new one.
 
-   ```bash
-   # From server-node-1 (example: token in env var — avoid putting it in shell history on shared machines)
-   read -s GRAFANA_CLOUD_API_KEY && echo
-   sudo k3s kubectl create secret generic prometheus-grafana-cloud-remote-write -n monitoring \
-     --from-literal=api-key="$GRAFANA_CLOUD_API_KEY" \
-     --dry-run=client -o yaml | sudo k3s kubectl apply -f -
-   unset GRAFANA_CLOUD_API_KEY
-   sudo k3s kubectl rollout restart deployment/prometheus -n monitoring
-   ```
+```bash
+# set secret
+read -s GRAFANA_CLOUD_API_KEY && echo
+# create secret
+sudo k3s kubectl create secret generic prometheus-grafana-cloud-remote-write -n monitoring \
+  --from-literal=api-key="$GRAFANA_CLOUD_API_KEY" \
+  --dry-run=client -o yaml | sudo k3s kubectl apply -f -
+unset GRAFANA_CLOUD_API_KEY
+sudo k3s kubectl rollout restart deployment/prometheus -n monitoring
+# check secret
+sudo k3s kubectl get secret alloy-grafana-cloud-loki -n monitoring -o jsonpath='{.data.api-key}' | base64 -d | wc -c
+```
 
 2. **If your push URL or instance id differ**, edit the `remote_write` block in ConfigMap **`prometheus-config`** (`prometheus-grafana.yaml`), re-apply, then reload or restart Prometheus (see below).
 
@@ -235,28 +238,20 @@ sudo k3s kubectl apply -f alloy-loki-cloud.yaml
 3. Patch Secret **`alloy-grafana-cloud-loki`** in **`monitoring`**. Wrap the Grafana token in **single quotes** so the shell does not treat **`$`** inside **`glc_...`** as variable expansion (`"$glc_..."` is wrong and stores an empty or broken key).
 
 ```bash
+# set secret
+read -s LOKI_API_KEY && echo
+# create secret
 sudo k3s kubectl create secret generic alloy-grafana-cloud-loki -n monitoring \
   --from-literal=loki-url='https://logs-prod-036.grafana.net/loki/api/v1/push' \
   --from-literal=loki-username='1529533' \
-  --from-literal=api-key='glc_YOUR_TOKEN_HERE' \
+  --from-literal=api-key="$LOKI_API_KEY" \
   --dry-run=client -o yaml | sudo k3s kubectl apply -f -
-
+unset LOKI_API_KEY
 sudo k3s kubectl rollout restart daemonset/alloy-logs -n monitoring
 sudo k3s kubectl rollout status daemonset/alloy-logs -n monitoring
-```
-
-Optional: keep a local override file matching **`*-secret.local.yaml`** (gitignored) and `kubectl apply -f` it instead of embedding secrets in commands.
-
-### Verify Alloy and the Secret
-
-```bash
+# check secret
 sudo k3s kubectl get pods -n monitoring -l app.kubernetes.io/name=alloy-logs -o wide
 sudo k3s kubectl describe secret alloy-grafana-cloud-loki -n monitoring
-```
-
-Expect **three** data keys with **non-zero** sizes. Decode **URL** and **username**; confirm **`api-key`** is present without printing it (e.g. decoded byte count should be well above zero):
-
-```bash
 sudo k3s kubectl get secret alloy-grafana-cloud-loki -n monitoring -o jsonpath='{.data.loki-url}' | base64 -d; echo
 sudo k3s kubectl get secret alloy-grafana-cloud-loki -n monitoring -o jsonpath='{.data.loki-username}' | base64 -d; echo
 sudo k3s kubectl get secret alloy-grafana-cloud-loki -n monitoring -o jsonpath='{.data.api-key}' | base64 -d | wc -c
