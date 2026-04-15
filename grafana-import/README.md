@@ -7,7 +7,7 @@ Copied from [layer-observability-grafana](https://github.com/taixingbi/layer-obs
 | `dashboard/inference.json` | [dashboards/inference.json](https://github.com/taixingbi/layer-observability-grafana/blob/main/dashboards/inference.json) |
 | `dashboard/embedding.json` | [dashboards/embedding.json](https://github.com/taixingbi/layer-observability-grafana/blob/main/dashboards/embedding.json) |
 | `dashboard/gpu.json` | [dashboards/gpu.json](https://github.com/taixingbi/layer-observability-grafana/blob/main/dashboards/gpu.json) |
-| `dashboard/loki-logs-http.json` | This repo: Loki / JSON log panels (4xx, 5xx, p95/p99, routes); use with `alloy-loki-cloud.yaml` |
+| `dashboard/loki-logs-http.json` | This repo: Loki / JSON log panels (4xx, 5xx, p95/p99, routes); use with `manifests/observability/alloy-loki-cloud.yaml` |
 | `alert/prometheus-alert-rules.yaml` | [alert/prometheus-alert-rules.yaml](https://github.com/taixingbi/layer-observability-grafana/blob/main/alert/prometheus-alert-rules.yaml) |
 
 ## Dashboards
@@ -28,7 +28,7 @@ Per upstream file header: **Alerting** → **Alert rules** → **Import** → **
 To refresh from upstream:
 
 ```bash
-curl -fsSL -o input/dashboards/inference.json \
+curl -fsSL -o dashboard/inference.json \
   https://raw.githubusercontent.com/taixingbi/layer-observability-grafana/main/dashboards/inference.json
 # repeat for other files as needed
 ```

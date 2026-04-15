@@ -1,6 +1,6 @@
 # Gateway — dev (namespace ai-dev, NodePort 30180).
 # Apply fails if 30180 is already taken (e.g. legacy Service layer-gateway-inference in namespace ai) — delete that Service first.
-# vLLM stays in namespace `ai` (apply inference-qwen25-7b.yaml first); backends use LAN NodePort 30080.
+# vLLM stays in namespace `ai` (apply manifests/ai/inference-qwen25-7b.yaml first); backends use LAN NodePort 30080.
 # Image: https://hub.docker.com/r/taixingbi/layer-gateway-inference-v1
 # Source: https://github.com/taixingbi/layer-gateway-inference-v1
 #

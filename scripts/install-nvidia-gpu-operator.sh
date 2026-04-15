@@ -144,4 +144,4 @@ k3s kubectl get pods -n "${GPU_OPERATOR_NAMESPACE}" -o wide 2>/dev/null || true
 
 echo ""
 echo "Next: apply the provided sample manifest to validate GPU scheduling:"
-echo "  sudo k3s kubectl apply -f gpu-vectoradd-sample.yaml"
+echo "  sudo k3s kubectl apply -f manifests/gpu/gpu-vectoradd-sample.yaml"

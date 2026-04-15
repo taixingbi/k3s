@@ -1,5 +1,5 @@
 # Gateway — prod (namespace ai-prod, NodePort 30380).
-# vLLM stays in namespace `ai` (apply inference-qwen25-7b.yaml first); backends use LAN NodePort 30080.
+# vLLM stays in namespace `ai` (apply manifests/ai/inference-qwen25-7b.yaml first); backends use LAN NodePort 30080.
 # Image: https://hub.docker.com/r/taixingbi/layer-gateway-inference-v1
 # Source: https://github.com/taixingbi/layer-gateway-inference-v1
 #
