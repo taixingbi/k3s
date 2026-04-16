@@ -61,6 +61,13 @@ data:
     retry:
       max_attempts: 2
       retryable_statuses: [502, 503, 504]
+
+    openai_fallback:
+      enabled: true
+      backend_name: openai-fallback
+      base_url: https://api.openai.com
+      model: gpt-4o-mini
+      api_key_env: OPENAI_API_KEY
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -100,6 +107,9 @@ spec:
               value: gateway
             - name: LOG_TIMEZONE
               value: EST
+          envFrom:
+            - secretRef:
+                name: layer-gateway-inference-secrets
           volumeMounts:
             - name: config
               mountPath: /app/config.yaml
