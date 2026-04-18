@@ -1,0 +1,75 @@
+# Loki alerting rules (LogQL in expr) for gateway JSON logs (level WARN / ERROR).
+#
+# NOT the same as prometheus-alert-rules.yaml: that file is PromQL for Grafana Cloud Mimir
+# (Alerting → Import → Prometheus YAML → hosted Prometheus/Mimir). This file uses LogQL
+# and targets Loki.
+#
+# How to use in Grafana Cloud:
+# - Grafana-managed (recommended): Alerting → New alert rule → choose Loki datasource
+#   `grafanacloud-taixingbi-logs` →
+#   use the same LogQL as expr below for the query, set condition/threshold and pending period
+#   to match `for`, add labels/annotations, save into your alert folder (e.g. Layer Observability).
+# - Data-source–managed / ruler: if your stack exposes the Loki ruler API, sync with lokitool
+#   or the ruler API (see https://grafana.com/docs/loki/latest/rules/).
+#
+# Logs: Alloy DaemonSet (manifests/observability/alloy-loki-cloud.yaml) adds cluster=k3s and
+# parses JSON fields including `level`. Gateway namespaces: ai-dev | ai-prod (scope with namespace only).
+#
+# Validate in Explore → Loki before enabling: run the expr’s metric query and confirm matches.
+# Tune `for`, the lookback in [...], and the threshold if WARN is too noisy (e.g. openai fallback).
+
+groups:
+  - name: gateway_log_alerts
+    interval: 60s
+    rules:
+      - alert: GatewayLogWarnDev
+        expr: sum(count_over_time({cluster="k3s", namespace="ai-dev"} |= "WARN" [5m])) or vector(0)
+        for: 5m
+        labels:
+          severity: warning
+          service: gateway
+          environment: dev
+          notification: alerts-all
+        annotations:
+          summary: "Gateway WARN logs (ai-dev)"
+          description: "At least one JSON log line with level=WARN in the last 5m in namespace ai-dev. Tune threshold or `for` if fallback traffic is expected."
+          runbook_url: "https://grafana.com/docs/loki/latest/rules/"
+
+      - alert: GatewayLogWarnProd
+        expr: sum(count_over_time({cluster="k3s", namespace="ai-prod"} |= "WARN" [5m])) or vector(0)
+        for: 5m
+        labels:
+          severity: warning
+          service: gateway
+          environment: prod
+          notification: alerts-all
+        annotations:
+          summary: "Gateway WARN logs (ai-prod)"
+          description: "At least one JSON log line with level=WARN in the last 5m in namespace ai-prod. Tune threshold or `for` if fallback traffic is expected."
+          runbook_url: "https://grafana.com/docs/loki/latest/rules/"
+
+      - alert: GatewayLogErrorDev
+        expr: sum(count_over_time({cluster="k3s", namespace="ai-dev"} |= "ERROR" [5m])) or vector(0)
+        for: 2m
+        labels:
+          severity: critical
+          service: gateway
+          environment: dev
+          notification: alerts-all
+        annotations:
+          summary: "Gateway ERROR logs (ai-dev)"
+          description: "At least one JSON log line with level=ERROR in the last 5m in namespace ai-dev."
+          runbook_url: "https://grafana.com/docs/loki/latest/rules/"
+
+      - alert: GatewayLogErrorProd
+        expr: sum(count_over_time({cluster="k3s", namespace="ai-prod"} |= "ERROR" [5m])) or vector(0)
+        for: 2m
+        labels:
+          severity: critical
+          service: gateway
+          environment: prod
+          notification: alerts-all
+        annotations:
+          summary: "Gateway ERROR logs (ai-prod)"
+          description: "At least one JSON log line with level=ERROR in the last 5m in namespace ai-prod."
+          runbook_url: "https://grafana.com/docs/loki/latest/rules/"

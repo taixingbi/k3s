@@ -14,8 +14,9 @@ Manifests and scripts for:
 | `scripts/install-nvidia-gpu-operator.sh` | Install GPU Operator for k3s containerd |
 | `manifests/gpu/gpu-vectoradd-sample.yaml` | One-shot GPU smoke test (`nvidia-smi`) |
 | `manifests/ai/inference-qwen25-7b.yaml` | vLLM inference workload + services (`ai`) |
-| `manifests/gateway/layer-gateway-inference-dev.yaml` | Gateway in `ai-dev` (NodePort `30180`) |
-| `manifests/gateway/layer-gateway-inference-prod.yaml` | Gateway in `ai-prod` (NodePort `30380`) |
+| `manifests/gateway/layer-gateway-inference-dev.yaml` | Chat gateway in `ai-dev` (NodePort `30180`) |
+| `manifests/gateway/layer-gateway-inference-prod.yaml` | Chat gateway in `ai-prod` (NodePort `30380`) |
+| `manifests/gateway/layer-gateway-embedding-dev.yaml` | Embedding gateway in `ai-dev` (NodePort `30181` → vLLM `:8001` on GPU nodes) |
 | `manifests/observability/prometheus-grafana.yaml` | Prometheus + Grafana Cloud remote_write |
 | `manifests/observability/alloy-loki-cloud.yaml` | Alloy DaemonSet logs -> Grafana Cloud Loki |
 | `grafana-import/dashboard/*.json` | Grafana dashboards (Prometheus + Loki) |
@@ -86,7 +87,7 @@ sudo k3s kubectl delete pod cuda-vectoradd
 
 ## 4) Deploy workloads + observability
 
-Detailed steps for vLLM, gateway (dev/prod), Prometheus, Alloy, and Grafana import now live in:
+Detailed steps for vLLM, inference gateway (dev/prod), embedding gateway (dev), Prometheus, Alloy, and Grafana import now live in:
 
 - `docs/deploy-workloads-and-observability.md`
 
