@@ -52,19 +52,23 @@ spec:
             - name: RETRY_MAX_ATTEMPTS
               value: "2"
             - name: ADMISSION_MAX_CONCURRENT
-              value: "20"
-            - name: ADMISSION_WAIT_TIMEOUT_MS
               value: "100"
+            - name: ADMISSION_WAIT_TIMEOUT_MS
+              value: "500"
             - name: CB_FAILURE_THRESHOLD
               value: "5"
             - name: CB_RESET_TIMEOUT_SEC
               value: "30"
             - name: ROUTING_INFLIGHT_WEIGHT
-              value: "10.0"
+              value: "20.0"
             - name: ROUTING_LATENCY_WEIGHT
-              value: "1.0"
+              value: "0.5"
             - name: ROUTING_ERROR_WEIGHT
               value: "100.0"
+            - name: ROUTING_EXPLORATION_RATE
+              value: "0.15"
+            - name: ROUTING_MAX_IDLE_MS
+              value: "500"
             - name: LOG_LEVEL
               value: INFO
             - name: LOG_JSON
