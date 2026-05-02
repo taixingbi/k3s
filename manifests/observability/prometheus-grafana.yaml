@@ -1,11 +1,12 @@
 # Prometheus in cluster (no local Grafana). Filename prometheus-grafana.yaml is historical;
 # only Prometheus + remote_write live here. Use Grafana Cloud for dashboards.
-# Scrapes (filter in Grafana with label workload=inference|gateway-inference|gateway-embedding|embedding|gpu-telemetry):
+# Scrapes (filter in Grafana with label workload=inference|gateway-inference|gateway-embedding|embedding|reranker|gpu-telemetry):
 #   - workload=inference: vLLM chat/completions via Service vllm-inference (ai)
 #   - workload=gateway-inference: chat routing gateway /metrics (Service layer-gateway-inference, ai-dev / ai-prod)
 #   - workload=gateway-embedding: embed routing gateway /metrics (Service layer-gateway-embedding, ai-dev)
 #   - workload=gpu-telemetry: DCGM per-GPU metrics (gpu-operator)
 #   - workload=embedding: vLLM embed on node LAN :8001 (static targets; pod→host routing)
+#   - workload=reranker: vLLM reranker on node LAN :8002 (static targets; pod→host routing)
 # Stack aligns with: https://github.com/taixingbi/layer-observability-grafana
 # Pod logs → Grafana Cloud Loki: companion manifest `alloy-loki-cloud.yaml` (Alloy DaemonSet, loki.write).
 #
@@ -189,6 +190,25 @@ data:
               workload: embedding
               service: embedding
               model: BAAI/bge-m3
+
+      # vLLM reranker: host:port on GPU nodes.
+      - job_name: vllm-reranker-gpu-node-1
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["192.168.86.173:8002"]
+            labels:
+              node: gpu-node-1
+              workload: reranker
+              service: reranker
+
+      - job_name: vllm-reranker-gpu-node-2
+        metrics_path: /metrics
+        static_configs:
+          - targets: ["192.168.86.176:8002"]
+            labels:
+              node: gpu-node-2
+              workload: reranker
+              service: reranker
 ---
 apiVersion: v1
 kind: Secret
