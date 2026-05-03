@@ -6,7 +6,8 @@ Deployment steps are split by component:
 2. inference gateway (dev/prod): `docs/deploy-gateway-reference.md`
 3. embedding gateway (dev): `docs/deploy-gateway-embedding.md`
 4. reranker gateway (dev): `docs/deploy-gateway-reranker.md`
-5. Prometheus remote_write: `docs/deploy-prometheus.md`
-6. Alloy + Loki: `docs/deploy-alloy-loki.md`
-7. Grafana import: `grafana-import/README.md`
+5. RAG query (dev): `docs/deploy-rag-query.md`
+6. Prometheus remote_write: `docs/deploy-prometheus.md`
+7. Alloy + Loki: `docs/deploy-alloy-loki.md`
+8. Grafana import: `grafana-import/README.md`
 

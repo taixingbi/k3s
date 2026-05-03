@@ -1,0 +1,109 @@
+# RAG query — dev (namespace ai-dev, NodePort 30183).
+# Hybrid retrieval + POST /v1/rag/query (FastMCP HTTP). Source: https://github.com/taixingbi/layer-rag-query-v1
+# Image listens on HTTP_PORT (default 8000 in Dockerfile); set to 30183 so Service port/nodePort match docs/port.md.
+#
+# Requires: Qdrant at QDRANT_URL; embedding gateway, reranker gateway, vLLM inference (see env below).
+# Optional: sudo k3s ctr images pull docker.io/taixingbi/layer-rag-query-v1:latest
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-dev
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: layer-rag-query
+  namespace: ai-dev
+  labels:
+    app: layer-rag-query
+    environment: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: layer-rag-query
+  template:
+    metadata:
+      labels:
+        app: layer-rag-query
+        environment: dev
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: rag-query
+          image: docker.io/taixingbi/layer-rag-query-v1:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 30183
+          env:
+            - name: HTTP_PORT
+              value: "30183"
+            - name: QDRANT_URL
+              value: "http://192.168.86.179:6333"
+            - name: QDRANT_API_KEY
+              value: ""
+            - name: EMBEDDING_URL
+              value: "http://layer-gateway-embedding:30181"
+            - name: EMBEDDING_INTERNAL_KEY
+              value: ""
+            - name: EMBEDDING_MODEL
+              value: "BAAI/bge-m3"
+            - name: VECTOR_SIZE
+              value: "1024"
+            - name: ENV
+              value: "dev"
+            - name: TOP_K_DENSE
+              value: "20"
+            - name: RRF_K
+              value: "60"
+            - name: INFERENCE_URL
+              value: "http://vllm-inference.ai.svc.cluster.local:8000"
+            - name: INFERENCE_MODEL
+              value: "Qwen/Qwen2.5-7B-Instruct"
+            - name: RERANK_URL
+              value: "http://layer-gateway-reranker:30182"
+            - name: RERANK_MODEL
+              value: "BAAI/bge-reranker-v2-m3"
+            - name: RERANK_TOP_N
+              value: "50"
+            - name: FINAL_CONTEXT_TOP_K
+              value: "10"
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "2"
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: layer-rag-query
+  namespace: ai-dev
+  labels:
+    app: layer-rag-query
+    environment: dev
+spec:
+  type: NodePort
+  selector:
+    app: layer-rag-query
+  ports:
+    - name: http
+      port: 30183
+      targetPort: http
+      nodePort: 30183
